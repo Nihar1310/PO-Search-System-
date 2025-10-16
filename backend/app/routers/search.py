@@ -26,7 +26,7 @@ class POSummary(BaseModel):
     filename: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 @router.post("/search", response_model=List[POSummary])
