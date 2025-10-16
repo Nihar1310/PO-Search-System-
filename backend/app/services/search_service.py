@@ -4,7 +4,7 @@ from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 from dateutil import parser as date_parser
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, String
 from sqlalchemy.orm import Session
 
 from ..models import PO
@@ -56,7 +56,7 @@ def _search_cache(db: Session, query: str, limit: int) -> List[PO]:
                 func.lower(PO.po_number).like(q),
                 func.lower(PO.client_name).like(q),
                 func.lower(PO.filename).like(q),
-                func.lower(func.cast(PO.parsed_data, str)).like(q),
+                func.lower(func.cast(PO.parsed_data, String)).like(q),
             )
         )
         .order_by(PO.created_at.desc())
