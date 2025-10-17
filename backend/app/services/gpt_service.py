@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import openai
+from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -12,7 +12,7 @@ from . import search_service
 
 
 settings = get_settings()
-openai.api_key = settings.OPENAI_API_KEY or None
+client = OpenAI(api_key=settings.OPENAI_API_KEY or None)
 
 MODEL_NAME = getattr(settings, "OPENAI_MODEL", None) or "gpt-4o-mini"
 
@@ -116,12 +116,20 @@ def generate_reply(
 
     if assistant_message.get("function_call"):
         # Store the assistant function call metadata
+        tool_call_id = (
+            assistant_message.get("tool_call_id")
+            or (assistant_message.get("tool_calls") or [{}])[0].get("id")
+        )
         messages_to_store.append(
             ChatMessage(
                 conversation_id=conversation_id,
                 role="assistant",
                 content="",
-                message_metadata={"function_call": assistant_message["function_call"]},
+                message_metadata={
+                    "function_call": assistant_message["function_call"],
+                    "tool_call_id": tool_call_id,
+                    "tool_calls": assistant_message.get("tool_calls"),
+                },
             )
         )
 
@@ -139,15 +147,36 @@ def generate_reply(
             conversation_id=conversation_id,
             role="tool",
             content=tool_content,
-            message_metadata={"tool_name": function_name},
+            message_metadata={
+                "tool_name": function_name,
+                "tool_call_id": tool_call_id,
+            },
         )
         messages_to_store.append(tool_message)
         db.add_all(messages_to_store)
         db.flush()
 
         # Append assistant and tool messages to history for follow-up response
-        history.append(assistant_message)
-        history.append({"role": "tool", "name": function_name, "content": tool_content})
+        # Use only tool_calls format (not function_call) for OpenAI v1.x compatibility
+        tool_call_id = (
+            assistant_message.get("tool_call_id")
+            or (assistant_message.get("tool_calls") or [{}])[0].get("id")
+        )
+        
+        history.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": assistant_message.get("tool_calls") or [{
+                "id": tool_call_id,
+                "type": "function",
+                "function": assistant_message["function_call"]
+            }]
+        })
+        
+        tool_history_payload = {"role": "tool", "name": function_name, "content": tool_content}
+        if tool_call_id:
+            tool_history_payload["tool_call_id"] = tool_call_id
+        history.append(tool_history_payload)
 
         try:
             second_response = _call_openai(history)
@@ -187,13 +216,56 @@ def generate_reply(
 
 
 def _call_openai(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
-    return openai.ChatCompletion.create(  # type: ignore[attr-defined]
+    response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
-        functions=FUNCTION_DEFINITIONS,
-        function_call="auto",
+        tools=[
+            {
+                "type": "function",
+                "function": func_def
+            }
+            for func_def in FUNCTION_DEFINITIONS
+        ],
+        tool_choice="auto",
         temperature=0.2,
     )
+    
+    # Convert new API format to old format for compatibility
+    choice = response.choices[0]
+    result = {
+        "choices": [
+            {
+                "message": {
+                    "role": choice.message.role,
+                    "content": choice.message.content,
+                },
+                "finish_reason": choice.finish_reason,
+            }
+        ]
+    }
+    
+    # Handle tool calls (new API) -> function_call (old format)
+    if choice.message.tool_calls:
+        tool_calls_serialized = []
+        for tool_call in choice.message.tool_calls:
+            tool_calls_serialized.append(
+                {
+                    "id": tool_call.id,
+                    "type": tool_call.type,
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    },
+                }
+            )
+
+        primary_call = tool_calls_serialized[0]
+        result_message = result["choices"][0]["message"]
+        result_message["function_call"] = primary_call["function"]
+        result_message["tool_call_id"] = primary_call["id"]
+        result_message["tool_calls"] = tool_calls_serialized
+
+    return result
 
 
 def _get_or_create_conversation(db: Session, conversation_id: Optional[str]) -> Conversation:
@@ -221,9 +293,33 @@ def _build_message_payload(db: Session, conversation_id: str, limit: int = 20) -
     for item in history:
         metadata = item.message_metadata or {}
         if item.role == "tool":
-            messages.append({"role": "tool", "name": metadata.get("tool_name"), "content": item.content})
+            tool_payload = {
+                "role": "tool",
+                "name": metadata.get("tool_name"),
+                "content": item.content,
+            }
+            tool_call_id = metadata.get("tool_call_id")
+            if tool_call_id:
+                tool_payload["tool_call_id"] = tool_call_id
+            messages.append(tool_payload)
         elif item.role == "assistant" and metadata.get("function_call"):
-            messages.append({"role": "assistant", "content": "", "function_call": metadata.get("function_call")})
+            # Use new tool_calls format for OpenAI v1.x API
+            function_call = metadata.get("function_call")
+            tool_call_id = metadata.get("tool_call_id") or "call_" + str(item.id)
+            
+            assistant_payload = {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": function_call["name"],
+                        "arguments": function_call["arguments"]
+                    }
+                }]
+            }
+            messages.append(assistant_payload)
         else:
             messages.append({"role": item.role, "content": item.content})
 

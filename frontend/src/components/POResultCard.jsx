@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   FileText, 
@@ -16,13 +16,57 @@ import {
   Package
 } from 'lucide-react'
 import GlassButton from './GlassButton'
+import { getPODetails } from '../services/api'
 
 const MotionGlassButton = motion(GlassButton)
 
 export default function POResultCard({ po, index = 0 }) {
   const [expanded, setExpanded] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
-  const parsed = po.parsed_data || {}
+  const [details, setDetails] = useState(po)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [detailsError, setDetailsError] = useState(null)
+
+  useEffect(() => {
+    setDetails(po)
+    setDetailsError(null)
+  }, [po])
+
+  useEffect(() => {
+    const needsFetch = !details?.parsed_data || Object.keys(details.parsed_data || {}).length === 0
+    if (!expanded || !po?.id || !needsFetch) {
+      return
+    }
+
+    let cancelled = false
+    const fetchDetails = async () => {
+      setDetailsLoading(true)
+      setDetailsError(null)
+      try {
+        const fullDetails = await getPODetails(po.id)
+        if (!cancelled && fullDetails) {
+          setDetails((prev) => ({ ...prev, ...fullDetails }))
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDetailsError('Failed to load full PO details.')
+        }
+      } finally {
+        if (!cancelled) {
+          setDetailsLoading(false)
+        }
+      }
+    }
+
+    fetchDetails()
+
+    return () => {
+      cancelled = true
+    }
+  }, [expanded, po?.id, details?.parsed_data])
+
+  const resolved = details || po
+  const parsed = resolved?.parsed_data || {}
   const items = parsed.line_items || parsed.items || []
 
   const getSourceIcon = (source) => {
@@ -62,7 +106,7 @@ export default function POResultCard({ po, index = 0 }) {
   }
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(po, null, 2)
+      const dataStr = JSON.stringify(resolved, null, 2)
     const dataBlob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
@@ -92,17 +136,17 @@ export default function POResultCard({ po, index = 0 }) {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-800">
-                  {po.po_number || 'Unknown PO'}
+                  {resolved.po_number || 'Unknown PO'}
                 </h3>
-                <p className="text-sm text-gray-500">{po.filename || 'No filename'}</p>
+                <p className="text-sm text-gray-500">{resolved.filename || 'No filename'}</p>
               </div>
             </div>
           </div>
           
           <div className="flex items-center space-x-2">
-            <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getSourceColor(po.source)}`}>
-              {getSourceIcon(po.source)}
-              <span className="capitalize">{po.source || 'Unknown'}</span>
+            <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getSourceColor(resolved.source)}`}>
+              {getSourceIcon(resolved.source)}
+              <span className="capitalize">{resolved.source || 'Unknown'}</span>
             </div>
           </div>
         </div>
@@ -115,7 +159,7 @@ export default function POResultCard({ po, index = 0 }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Date</p>
-              <p className="text-sm font-medium text-gray-800">{formatDate(po.date)}</p>
+              <p className="text-sm font-medium text-gray-800">{formatDate(resolved.date)}</p>
             </div>
           </div>
           
@@ -126,7 +170,7 @@ export default function POResultCard({ po, index = 0 }) {
             <div>
               <p className="text-xs text-gray-500">Client</p>
               <p className="text-sm font-medium text-gray-800 truncate">
-                {po.client_name || parsed.client_name || 'Unknown'}
+                {resolved.client_name || parsed.client_name || 'Unknown'}
               </p>
             </div>
           </div>
@@ -138,7 +182,7 @@ export default function POResultCard({ po, index = 0 }) {
             <div>
               <p className="text-xs text-gray-500">Total Value</p>
               <p className="text-sm font-medium text-gray-800">
-                {formatCurrency(po.total_value ?? parsed.total_value)}
+                {formatCurrency(resolved.total_value ?? parsed.total_value)}
               </p>
             </div>
           </div>
@@ -190,7 +234,7 @@ export default function POResultCard({ po, index = 0 }) {
 
         <div className="text-xs text-gray-500 flex items-center space-x-1">
           <Clock className="w-3 h-3" />
-          <span>Created {formatDate(po.created_at)}</span>
+          <span>Created {formatDate(resolved.created_at)}</span>
         </div>
       </div>
 
@@ -205,6 +249,18 @@ export default function POResultCard({ po, index = 0 }) {
             className="overflow-hidden"
           >
             <div className="p-6 bg-white/50 border-t border-white/20 space-y-6">
+              {detailsLoading && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs text-blue-700">
+                  Loading PO details…
+                </div>
+              )}
+
+              {detailsError && (
+                <div className="rounded-lg border border-red-200 bg-red-50/80 px-3 py-2 text-xs text-red-600">
+                  {detailsError}
+                </div>
+              )}
+
               {/* Line Items */}
               {items.length > 0 && (
                 <div>
@@ -266,11 +322,11 @@ export default function POResultCard({ po, index = 0 }) {
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">PO ID</p>
-                  <p className="text-sm font-mono text-gray-700">{po.id}</p>
+                  <p className="text-sm font-mono text-gray-700">{resolved.id}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-1">File ID</p>
-                  <p className="text-sm font-mono text-gray-700 truncate">{po.file_id || 'N/A'}</p>
+                  <p className="text-sm font-mono text-gray-700 truncate">{resolved.file_id || 'N/A'}</p>
                 </div>
               </div>
             </div>

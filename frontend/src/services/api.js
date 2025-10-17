@@ -1,8 +1,12 @@
 import axios from 'axios'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
 const client = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: API_BASE_URL,
 })
+
+export { API_BASE_URL }
 
 export async function sendChatMessage(message, conversationId) {
   const payload = conversationId ? { message, conversation_id: conversationId } : { message }
@@ -42,5 +46,10 @@ export async function disconnectAuth() {
 
 export async function triggerSync() {
   const { data } = await client.post('/api/sync')
+  return data
+}
+
+export async function getAnalytics() {
+  const { data } = await client.get('/api/analytics')
   return data
 }

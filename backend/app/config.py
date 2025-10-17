@@ -1,5 +1,7 @@
 import os
 from functools import lru_cache
+from typing import List
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -16,6 +18,12 @@ class Settings:
     GOOGLE_TOKEN_PATH: str
     GOOGLE_SCOPES: str
     GOOGLE_CLIENT_SECRETS_FILE: str
+    FRONTEND_ORIGINS: List[str]
+    DOCAI_PROJECT_ID: str
+    DOCAI_LOCATION: str
+    DOCAI_PROCESSOR_ID: str
+    DOCAI_PROCESSOR_VERSION: str
+    DOCAI_API_ENDPOINT: str
 
     def __init__(self) -> None:
         self.GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -31,6 +39,13 @@ class Settings:
             "https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/drive.readonly",
         )
         self.GOOGLE_CLIENT_SECRETS_FILE = os.getenv("GOOGLE_CLIENT_SECRETS_FILE", "")
+        raw_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173")
+        self.FRONTEND_ORIGINS = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+        self.DOCAI_PROJECT_ID = os.getenv("DOCAI_PROJECT_ID", "")
+        self.DOCAI_LOCATION = os.getenv("DOCAI_LOCATION", "us")
+        self.DOCAI_PROCESSOR_ID = os.getenv("DOCAI_PROCESSOR_ID", "")
+        self.DOCAI_PROCESSOR_VERSION = os.getenv("DOCAI_PROCESSOR_VERSION", "")
+        self.DOCAI_API_ENDPOINT = os.getenv("DOCAI_API_ENDPOINT", "")
 
 
 @lru_cache(maxsize=1)

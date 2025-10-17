@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+import mimetypes
 import os
 from typing import Any, Dict, Optional, Tuple
 
@@ -12,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Feature flags
 USE_DOCAI = os.getenv("USE_DOCAI", "false").lower() == "true"
 
+if USE_DOCAI:
+    from . import docai_service
+
 
 def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = None) -> Dict[str, Any]:
     # Validate input
@@ -19,13 +23,27 @@ def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = 
         logger.warning(f"Invalid file input: {filename}")
         return _create_empty_result(filename)
     
-    # Extract text with fallback logic
-    text, extraction_method = _extract_text_with_fallback(file_bytes, filename, mime_type)
+    text = ''
+    extraction_method = 'unknown'
+    docai_payload: Optional[Dict[str, Any]] = None
+
+    if USE_DOCAI:
+        text, docai_payload = _extract_text_with_docai(file_bytes, filename, mime_type)
+        if text:
+            extraction_method = 'docai'
+
+    if not text:
+        # Extract text with fallback logic
+        text, extraction_method = _extract_text_with_fallback(file_bytes, filename, mime_type)
     
     # Validate extracted text
     if not _validate_extracted_text(text, filename):
         logger.warning(f"Text extraction failed for: {filename}")
-        return _create_empty_result(filename, extraction_method=extraction_method)
+        return _create_empty_result(
+            filename,
+            extraction_method=extraction_method,
+            docai_payload=docai_payload,
+        )
 
     # Extract PO data
     po_number = extractors.extract_po_number(text)
@@ -37,7 +55,7 @@ def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = 
     # Validate PO signals
     po_signals = _validate_po_signals(text, po_number, date_value, client_name)
 
-    return {
+    result = {
         "po_number": po_number,
         "date": date_value.isoformat() if date_value else None,
         "client": client_name,
@@ -50,6 +68,44 @@ def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = 
         "po_signals": po_signals,
         "text_length": len(text),
     }
+
+    if docai_payload:
+        result["docai"] = {
+            "entities": docai_payload.get("entities", []),
+            "pages": docai_payload.get("pages"),
+        }
+
+    return result
+
+
+def _detect_mime_type(filename: str, declared: Optional[str]) -> str:
+    if declared:
+        return declared
+    guessed, _ = mimetypes.guess_type(filename)
+    if guessed:
+        return guessed
+    return "application/pdf"
+
+
+def _extract_text_with_docai(
+    file_bytes: bytes,
+    filename: str,
+    mime_type: Optional[str],
+) -> Tuple[str, Optional[Dict[str, Any]]]:
+    resolved_mime = _detect_mime_type(filename, mime_type)
+    if resolved_mime not in docai_service.SUPPORTED_MIME_TYPES:
+        logger.debug("Document AI unsupported mime type %s, falling back", resolved_mime)
+        return "", None
+
+    try:
+        payload = docai_service.process_document(file_bytes, resolved_mime)
+        text = payload.get("text", "")
+        if text:
+            logger.info("Extracted %s characters via Document AI", len(text))
+        return text, payload
+    except Exception as exc:  # pragma: no cover - external service
+        logger.error("Document AI extraction failed: %s", exc)
+        return "", None
 
 
 def _extract_text_with_fallback(file_bytes: bytes, filename: str, mime_type: Optional[str]) -> Tuple[str, str]:
@@ -132,6 +188,28 @@ def _extract_text_with_ocr(file_bytes: bytes) -> Optional[str]:
         from pdf2image import convert_from_bytes  # type: ignore
         import pytesseract  # type: ignore
         from PIL import Image  # type: ignore
+        
+        # Configure pytesseract to use the correct tesseract path
+        import os
+        tesseract_path = os.getenv('TESSERACT_CMD', '/opt/homebrew/bin/tesseract')
+        if os.path.exists(tesseract_path):
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
+        # Check if it's an image file first
+        try:
+            image = Image.open(io.BytesIO(file_bytes))
+            # If we can open it as an image, process it directly
+            text = pytesseract.image_to_string(image)
+            if text.strip():
+                logger.info(f"Direct OCR extracted {len(text)} characters from image")
+                return text.strip()
+        except Exception as exc:
+            logger.debug(f"Not an image file or direct OCR failed: {exc}")
+
+        # Configure pdf2image to use the correct poppler path
+        poppler_path = os.getenv('POPPLER_PATH', '/opt/homebrew/bin')
+        if os.path.exists(poppler_path):
+            os.environ['PATH'] = poppler_path + ':' + os.environ.get('PATH', '')
 
         # Convert PDF to images with enhanced settings
         images = convert_from_bytes(
@@ -341,11 +419,15 @@ def _validate_po_signals(text: str, po_number: Optional[str], date_value: Option
     return signals
 
 
-def _create_empty_result(filename: str, extraction_method: str = "none") -> Dict[str, Any]:
+def _create_empty_result(
+    filename: str,
+    extraction_method: str = "none",
+    docai_payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     Create empty result structure for failed parsing
     """
-    return {
+    result = {
         "po_number": None,
         "date": None,
         "client": None,
@@ -366,3 +448,10 @@ def _create_empty_result(filename: str, extraction_method: str = "none") -> Dict
         "text_length": 0,
     }
 
+    if docai_payload:
+        result["docai"] = {
+            "entities": docai_payload.get("entities", []),
+            "pages": docai_payload.get("pages"),
+        }
+
+    return result

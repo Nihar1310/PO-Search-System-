@@ -1,22 +1,67 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, LogIn, LogOut, Database } from 'lucide-react'
 import { disconnectAuth, getAuthLoginUrl, triggerSync } from '../services/api'
 import GlassButton from './GlassButton'
+
+const BACKEND_ORIGIN = (() => {
+  try {
+    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+    return new URL(base).origin
+  } catch (err) {
+    return 'http://localhost:8000'
+  }
+})()
 
 export default function ConnectionPanel({ authState, onRefresh }) {
   const [busyAction, setBusyAction] = useState(null)
   const [infoMessage, setInfoMessage] = useState(null)
   const [errorMessage, setErrorMessage] = useState(null)
   const [lastSync, setLastSync] = useState(null)
+  const oauthWindowRef = useRef(null)
+
+  useEffect(() => {
+    const handleOAuthMessage = async (event) => {
+      if (!event?.data || event.origin !== BACKEND_ORIGIN) return
+      if (event.data?.type === 'po-auth-success') {
+        oauthWindowRef.current?.close()
+        oauthWindowRef.current = null
+        setErrorMessage(null)
+        setInfoMessage('Google account connected! Refreshing status…')
+        setBusyAction('refresh')
+
+        if (typeof onRefresh === 'function') {
+          try {
+            await onRefresh()
+            setInfoMessage('Google account connected! Ready to sync your POs.')
+          } catch (err) {
+            setErrorMessage('Connected, but failed to refresh status automatically. Click “Refresh Status”.')
+          }
+        }
+
+        setBusyAction(null)
+      }
+    }
+
+    window.addEventListener('message', handleOAuthMessage)
+    return () => {
+      window.removeEventListener('message', handleOAuthMessage)
+    }
+  }, [onRefresh])
 
   const handleConnect = async () => {
     setBusyAction('connect')
     setErrorMessage(null)
+    setInfoMessage(null)
     try {
       const { auth_url: authUrl } = await getAuthLoginUrl()
       if (authUrl) {
-        window.open(authUrl, '_blank', 'noopener,noreferrer')
-        setInfoMessage('Google OAuth opened in a new tab. Complete consent and click “Refresh Status”.')
+        const popup = window.open(authUrl, '_blank', 'noopener,noreferrer')
+        if (!popup) {
+          setErrorMessage('Popup blocked. Allow popups for this site and try again.')
+          return
+        }
+        oauthWindowRef.current = popup
+        setInfoMessage('Complete Google consent in the new tab. We will refresh automatically.')
       }
     } catch (err) {
       setErrorMessage('Failed to initiate Google OAuth. Check backend logs.')

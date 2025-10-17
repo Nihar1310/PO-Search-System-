@@ -1,6 +1,15 @@
-import { useState, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Filter, Clock, AlertCircle, CheckCircle2 } from 'lucide-react'
+import {
+  Search,
+  Filter,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Calendar,
+  DollarSign
+} from 'lucide-react'
 import { searchPOs } from '../services/api'
 import GlassButton from './GlassButton'
 
@@ -18,7 +27,80 @@ export default function SearchBar({ onResults }) {
     'High value POs'
   ])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [rawResults, setRawResults] = useState([])
+  const [filters, setFilters] = useState({
+    sources: new Set(),
+    startDate: '',
+    endDate: '',
+    minValue: ''
+  })
+  const [filterTouched, setFilterTouched] = useState(false)
   const inputRef = useRef(null)
+
+  const filteredResults = useMemo(() => {
+    if (!rawResults.length) return []
+
+    return rawResults.filter((po) => {
+      const source = (po.source || 'unknown').toLowerCase()
+      const sourceMatch = filters.sources.size === 0 || filters.sources.has(source)
+
+      const hasDate = Boolean(po.date)
+      let date = null
+      if (hasDate) {
+        const parsed = new Date(po.date)
+        date = Number.isNaN(parsed.getTime()) ? null : parsed
+      }
+
+      const startMatch = filters.startDate
+        ? date
+          ? date >= new Date(filters.startDate)
+          : false
+        : true
+      const endMatch = filters.endDate
+        ? date
+          ? date <= new Date(filters.endDate)
+          : false
+        : true
+
+      const minValueMatch = filters.minValue
+        ? Number(po.total_value || 0) >= Number(filters.minValue)
+        : true
+
+      return sourceMatch && startMatch && endMatch && minValueMatch
+    })
+  }, [rawResults, filters])
+
+  useEffect(() => {
+    if (rawResults.length) {
+      onResults(filteredResults)
+    }
+  }, [filteredResults, rawResults.length, onResults])
+
+  const updateFilters = (updater) => {
+    setFilterTouched(true)
+    setFilters((prev) => {
+      const next = updater(prev)
+      return { ...next }
+    })
+  }
+
+  const toggleSource = (source) => {
+    updateFilters((prev) => {
+      const nextSources = new Set(prev.sources)
+      if (nextSources.has(source)) {
+        nextSources.delete(source)
+      } else {
+        nextSources.add(source)
+      }
+      return { ...prev, sources: nextSources }
+    })
+  }
+
+  const clearFilters = () => {
+    setFilterTouched(false)
+    setFilters({ sources: new Set(), startDate: '', endDate: '', minValue: '' })
+  }
 
   const onSubmit = async (e) => {
     e.preventDefault()
@@ -39,12 +121,16 @@ export default function SearchBar({ onResults }) {
     
     try {
       const res = await searchPOs(query)
-      onResults(res)
+      setRawResults(res)
+      if (!filterTouched) {
+        onResults(res)
+      }
       
       if (!res.length) {
         setError('No POs matched your search. Try syncing your Gmail/Drive or using different keywords.')
       }
     } catch (e) {
+      setRawResults([])
       onResults([])
       setError('Search failed. Please check your backend connection and try again.')
     } finally {
@@ -65,6 +151,9 @@ export default function SearchBar({ onResults }) {
   const clearSearch = () => {
     setQuery('')
     setError(null)
+    setRawResults([])
+    setFilterTouched(false)
+    setFilters({ sources: new Set(), startDate: '', endDate: '', minValue: '' })
     onResults([])
     inputRef.current?.focus()
   }
@@ -117,6 +206,155 @@ export default function SearchBar({ onResults }) {
     </AnimatePresence>
   )
 
+  const sourceOptions = [
+    { label: 'Gmail', value: 'gmail' },
+    { label: 'Drive', value: 'drive' },
+    { label: 'Cache', value: 'cache' }
+  ]
+
+  const summaryStats = useMemo(() => {
+    if (!filteredResults.length) {
+      return { total: 0, gmail: 0, drive: 0, maxValue: null }
+    }
+
+    let gmail = 0
+    let drive = 0
+    let maxValue = 0
+
+    filteredResults.forEach((po) => {
+      const value = Number(po.total_value || 0)
+      if (value > maxValue) {
+        maxValue = value
+      }
+      const source = (po.source || '').toLowerCase()
+      if (source === 'gmail') gmail += 1
+      if (source === 'drive') drive += 1
+    })
+
+    return {
+      total: filteredResults.length,
+      gmail,
+      drive,
+      maxValue: maxValue || null
+    }
+  }, [filteredResults])
+
+  const renderFilters = () => (
+    <AnimatePresence>
+      {showFilters && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+          className="mt-4 space-y-5 rounded-2xl border border-white/40 bg-white/95 p-5 shadow-sm"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Filters</p>
+              <p className="text-sm text-gray-500">Refine results by source, date range, or minimum PO value.</p>
+            </div>
+            <GlassButton
+              type="button"
+              variant="ghost"
+              icon={XCircle}
+              className="text-sm"
+              onClick={clearFilters}
+            >
+              Reset filters
+            </GlassButton>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Sources</p>
+            <div className="flex flex-wrap gap-2">
+              {sourceOptions.map(({ label, value }) => {
+                const active = filters.sources.has(value)
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleSource(value)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="flex flex-col gap-2 text-xs font-medium text-gray-600">
+              <span className="inline-flex items-center gap-2 text-gray-600">
+                <Calendar className="h-4 w-4 text-blue-500" /> Start date
+              </span>
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => updateFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs font-medium text-gray-600">
+              <span className="inline-flex items-center gap-2 text-gray-600">
+                <Calendar className="h-4 w-4 text-blue-500" /> End date
+              </span>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => updateFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs font-medium text-gray-600 sm:col-span-2">
+              <span className="inline-flex items-center gap-2 text-gray-600">
+                <DollarSign className="h-4 w-4 text-blue-500" /> Minimum total value (USD)
+              </span>
+              <input
+                type="number"
+                min="0"
+                value={filters.minValue}
+                placeholder="e.g. 5000"
+                onChange={(e) => updateFilters((prev) => ({ ...prev, minValue: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
+  const renderSummary = () => (
+    <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-200">
+      <div className="text-center">
+        <div className="text-2xl font-bold text-gray-800">{summaryStats.total}</div>
+        <div className="text-xs text-gray-500">Filtered Results</div>
+      </div>
+      <div className="text-center">
+        <div className="text-2xl font-bold text-gray-800">
+          {summaryStats.maxValue != null ? `$${summaryStats.maxValue.toLocaleString()}` : '—'}
+        </div>
+        <div className="text-xs text-gray-500">Highest PO Value</div>
+      </div>
+      <div className="text-center">
+        <div className="text-lg font-semibold text-blue-600">{summaryStats.gmail}</div>
+        <div className="text-xs text-gray-500">Gmail Matches</div>
+      </div>
+      <div className="text-center">
+        <div className="text-lg font-semibold text-indigo-600">{summaryStats.drive}</div>
+        <div className="text-xs text-gray-500">Drive Matches</div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="glass rounded-2xl shadow-xl border border-white/20 p-6 space-y-4">
       {/* Header */}
@@ -131,10 +369,11 @@ export default function SearchBar({ onResults }) {
           type="button"
           variant="ghost"
           icon={Filter}
-          className="px-3 py-2 text-xs font-medium"
-          aria-label="Filter"
+          className={`px-3 py-2 text-xs font-medium ${showFilters ? 'text-blue-600' : ''}`}
+          aria-label="Filters"
+          onClick={() => setShowFilters((prev) => !prev)}
         >
-          Filters
+          {showFilters ? 'Hide Filters' : 'Filters'}
         </MotionGlassButton>
       </div>
 
@@ -185,6 +424,14 @@ export default function SearchBar({ onResults }) {
         <SearchSuggestions />
       </form>
 
+      {renderFilters()}
+
+      {filterTouched && rawResults.length > 0 && filteredResults.length === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-700">
+          Filters are currently hiding all results. Adjust or reset them to see your matches.
+        </div>
+      )}
+
       {/* Status Messages */}
       <AnimatePresence>
         {error && (
@@ -218,16 +465,7 @@ export default function SearchBar({ onResults }) {
       </AnimatePresence>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-gray-800">0</div>
-          <div className="text-xs text-gray-500">Total POs</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-gray-800">0</div>
-          <div className="text-xs text-gray-500">This Month</div>
-        </div>
-      </div>
+      {renderSummary()}
     </div>
   )
 }

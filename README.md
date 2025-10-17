@@ -32,18 +32,28 @@ An intelligent Purchase Order search and parsing system powered by AI that searc
 
 ## 🏗️ Architecture
 
-**Backend**: FastAPI + SQLite + Google APIs + Enhanced OCR (Tesseract + Image Preprocessing) + OpenAI GPT-4  
-**Frontend**: React + TailwindCSS + Modern Chat UI  
-**Flow**: User query → GPT-4 interprets → Backend searches Gmail/Drive → Parse PO → Return structured data
+**Backend**: FastAPI + SQLite + Google APIs + Google Document AI + Enhanced OCR (Tesseract + Image Preprocessing) + OpenAI GPT-4
+**Frontend**: React + TailwindCSS + Modern Chat UI
+**Flow**: User query → GPT-4 interprets → Backend searches Gmail/Drive → Parse PO (Document AI/OCR) → Return structured data
+
+### Document AI Integration
+
+The system now supports **Google Document AI** for superior text extraction and entity recognition:
+- **Automatic Routing**: PDFs and images route through Document AI first when enabled
+- **Entity Recognition**: Extracts structured entities (dates, addresses, line items) with confidence scores
+- **Graceful Fallback**: Falls back to native PDF parsing or Tesseract OCR if Document AI unavailable
+- **Metadata Preservation**: Document AI entity hints preserved in parse results for enhanced accuracy
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.9+
 - Node.js 18+
-- Google Cloud Project with Gmail & Drive APIs enabled
-- OpenAI API key
-- Tesseract OCR (optional, for enhanced OCR capabilities)
+- Google Cloud Project with:
+  - Gmail & Drive APIs enabled
+  - Document AI API enabled (optional, for advanced parsing)
+- OpenAI API key with billing configured
+- Tesseract OCR (optional, for fallback OCR capabilities)
 
 ### Backend Setup
 
@@ -133,17 +143,89 @@ po-project/
 Create a `.env` file in the `backend/` directory:
 
 ```env
+# Google OAuth Credentials
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-DATABASE_URL=sqlite:///./po_cache.db
-REDIRECT_URI=http://localhost:8000/auth/callback
+GOOGLE_CLIENT_SECRETS_FILE=client_secret.json
 GOOGLE_TOKEN_PATH=token.json
 GOOGLE_SCOPES=https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/drive.readonly
-GOOGLE_CLIENT_SECRETS_FILE=client_secret.json
+
+# OpenAI Configuration
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+
+# Database
+DATABASE_URL=sqlite:///./po_cache.db
+
+# OAuth
+REDIRECT_URI=http://localhost:8000/auth/callback
+
+# Document AI (Optional - for advanced parsing)
 USE_DOCAI=false
+DOCAI_PROJECT_ID=your-gcp-project-id
+DOCAI_LOCATION=us
+DOCAI_PROCESSOR_ID=your-processor-id
+DOCAI_PROCESSOR_VERSION=  # Optional: specific version
+DOCAI_API_ENDPOINT=  # Optional: e.g., us-documentai.googleapis.com
 ```
+
+### 🤖 Document AI Setup (Optional but Recommended)
+
+Document AI provides superior text extraction with entity recognition. To enable:
+
+1. **Enable Document AI API** in Google Cloud Console:
+   ```bash
+   gcloud services enable documentai.googleapis.com
+   ```
+
+2. **Create a Document Processor**:
+   - Go to [Document AI Console](https://console.cloud.google.com/ai/document-ai/processors)
+   - Create a new processor (choose "Form Parser" or "OCR Processor")
+   - Note the **Processor ID** and **Location** (e.g., "us", "eu")
+
+3. **Set up Service Account**:
+   ```bash
+   # Create service account
+   gcloud iam service-accounts create docai-po-parser \
+     --display-name="Document AI PO Parser"
+   
+   # Grant Document AI User role
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+     --member="serviceAccount:docai-po-parser@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/documentai.apiUser"
+   
+   # Create and download key
+   gcloud iam service-accounts keys create docai-key.json \
+     --iam-account=docai-po-parser@YOUR_PROJECT_ID.iam.gserviceaccount.com
+   ```
+
+4. **Configure Environment**:
+   ```bash
+   # Set credentials path
+   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/docai-key.json"
+   
+   # Update .env
+   USE_DOCAI=true
+   DOCAI_PROJECT_ID=your-gcp-project-id
+   DOCAI_LOCATION=us
+   DOCAI_PROCESSOR_ID=your-processor-id-from-console
+   ```
+
+5. **Install Dependencies**:
+   ```bash
+   pip install google-cloud-documentai
+   ```
+
+6. **Restart Backend**:
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+**How It Works:**
+- When `USE_DOCAI=true`, PDFs and images route through Document AI first
+- Document AI extracts text with entity hints (dates, amounts, addresses)
+- If Document AI fails or is unavailable, system falls back to native/OCR parsing
+- Entity metadata preserved in `parsed_data.docai` field for enhanced accuracy
 
 ## 📖 API Endpoints
 
@@ -164,13 +246,15 @@ USE_DOCAI=false
 
 ## ⚡ Key Features
 
-✅ **Fuzzy Search**: Find POs even with incomplete information  
-✅ **Multi-Format Support**: PDF, Word, scanned documents  
-✅ **Enhanced OCR**: Tesseract with image preprocessing for better accuracy  
-✅ **Intelligent Caching**: Fast metadata search with on-demand document fetching  
-✅ **Natural Language**: Chat with the system like a colleague  
-✅ **Export Ready**: Structured JSON output for integrations  
-✅ **Validation**: Input validation, text quality checks, and PO signal detection  
+✅ **Fuzzy Search**: Find POs even with incomplete information
+✅ **Multi-Format Support**: PDF, Word, scanned documents
+✅ **Document AI Integration**: Google Document AI for superior text extraction and entity recognition
+✅ **Enhanced OCR**: Tesseract with image preprocessing for better accuracy
+✅ **Intelligent Caching**: Fast metadata search with on-demand document fetching
+✅ **Natural Language**: Chat with the system like a colleague
+✅ **Export Ready**: Structured JSON output for integrations
+✅ **Validation**: Input validation, text quality checks, and PO signal detection
+✅ **Graceful Fallback**: Multi-layer parsing strategy (Document AI → Native → OCR)
 
 ## 🔮 Future Extensions
 

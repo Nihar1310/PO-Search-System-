@@ -76,4 +76,4 @@ Thumbs.db
 
 # Logs
 *.log
-logs/
+logs/backend/docai-key.json
