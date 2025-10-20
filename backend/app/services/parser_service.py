@@ -4,7 +4,7 @@ import io
 import logging
 import mimetypes
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 from ..utils import extractors
 
@@ -12,9 +12,13 @@ logger = logging.getLogger(__name__)
 
 # Feature flags
 USE_DOCAI = os.getenv("USE_DOCAI", "false").lower() == "true"
+USE_VISION = os.getenv("USE_VISION", "false").lower() == "true"
 
 if USE_DOCAI:
     from . import docai_service
+
+if USE_VISION:
+    from . import vision_service
 
 
 def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = None) -> Dict[str, Any]:
@@ -26,14 +30,22 @@ def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = 
     text = ''
     extraction_method = 'unknown'
     docai_payload: Optional[Dict[str, Any]] = None
+    vision_payload: Optional[Dict[str, Any]] = None
 
-    if USE_DOCAI:
+    # Try Vision API first if enabled
+    if USE_VISION:
+        text, vision_payload = _extract_text_with_vision(file_bytes, filename, mime_type)
+        if text:
+            extraction_method = 'vision'
+
+    # Fallback to Document AI if Vision fails
+    if not text and USE_DOCAI:
         text, docai_payload = _extract_text_with_docai(file_bytes, filename, mime_type)
         if text:
             extraction_method = 'docai'
 
+    # Final fallback to Tesseract OCR
     if not text:
-        # Extract text with fallback logic
         text, extraction_method = _extract_text_with_fallback(file_bytes, filename, mime_type)
     
     # Validate extracted text
@@ -43,6 +55,7 @@ def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = 
             filename,
             extraction_method=extraction_method,
             docai_payload=docai_payload,
+            vision_payload=vision_payload,
         )
 
     # Extract PO data
@@ -55,14 +68,16 @@ def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = 
     # Validate PO signals
     po_signals = _validate_po_signals(text, po_number, date_value, client_name)
 
+    structured_from_docai = _structured_from_docai(docai_payload) if docai_payload else {}
+
     result = {
         "po_number": po_number,
         "date": date_value.isoformat() if date_value else None,
         "client": client_name,
-        "items": [],
-        "total_value": total_value,
-        "terms": payment_terms,
-        "raw_text": text[:5000],
+        "items": structured_from_docai.get("items", []),
+        "total_value": structured_from_docai.get("total_value", total_value),
+        "terms": structured_from_docai.get("terms", payment_terms),
+        "raw_text": _clean_excerpt(text),
         "source_filename": filename,
         "extraction_method": extraction_method,
         "po_signals": po_signals,
@@ -73,7 +88,23 @@ def parse_document(file_bytes: bytes, filename: str, mime_type: Optional[str] = 
         result["docai"] = {
             "entities": docai_payload.get("entities", []),
             "pages": docai_payload.get("pages"),
+            "key_values": docai_payload.get("key_values", {}),
         }
+
+    if vision_payload:
+        result["vision"] = {
+            "confidence": vision_payload.get("confidence", 0.0),
+            "pages": vision_payload.get("pages", 1),
+            "word_count": vision_payload.get("word_count", 0),
+            "detections": vision_payload.get("detections", 0),
+        }
+
+    if structured_from_docai.get("client"):
+        result["client"] = structured_from_docai["client"]
+    if structured_from_docai.get("po_number"):
+        result["po_number"] = structured_from_docai["po_number"]
+    if structured_from_docai.get("terms") and not result.get("terms"):
+        result["terms"] = structured_from_docai["terms"]
 
     return result
 
@@ -105,6 +136,33 @@ def _extract_text_with_docai(
         return text, payload
     except Exception as exc:  # pragma: no cover - external service
         logger.error("Document AI extraction failed: %s", exc)
+        return "", None
+
+
+def _extract_text_with_vision(
+    file_bytes: bytes,
+    filename: str,
+    mime_type: Optional[str],
+) -> Tuple[str, Optional[Dict[str, Any]]]:
+    """Extract text using Google Cloud Vision API."""
+    try:
+        detected_mime = _detect_mime_type(filename, mime_type)
+        
+        if detected_mime == "application/pdf":
+            result = vision_service.process_pdf_pages(file_bytes)
+        else:
+            result = vision_service.process_document(file_bytes, detected_mime)
+        
+        text = result.get("text", "")
+        if text:
+            logger.info(f"Vision API extracted {len(text)} characters from {filename}")
+            return text, result
+        else:
+            logger.warning(f"Vision API returned no text for {filename}")
+            return "", None
+            
+    except Exception as exc:
+        logger.error(f"Vision API extraction failed for {filename}: {exc}")
         return "", None
 
 
@@ -258,7 +316,7 @@ def _extract_text_with_ocr(file_bytes: bytes) -> Optional[str]:
         return None
 
 
-def _preprocess_image_for_ocr(image: Image.Image) -> Image.Image:
+def _preprocess_image_for_ocr(image) -> object:
     """
     Preprocess image to improve OCR accuracy
     """
@@ -282,6 +340,7 @@ def _preprocess_image_for_ocr(image: Image.Image) -> Image.Image:
         )
         
         # Convert back to PIL
+        from PIL import Image
         return Image.fromarray(img_array)
         
     except ImportError:
@@ -423,6 +482,7 @@ def _create_empty_result(
     filename: str,
     extraction_method: str = "none",
     docai_payload: Optional[Dict[str, Any]] = None,
+    vision_payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Create empty result structure for failed parsing
@@ -454,4 +514,118 @@ def _create_empty_result(
             "pages": docai_payload.get("pages"),
         }
 
+    if vision_payload:
+        result["vision"] = {
+            "confidence": vision_payload.get("confidence", 0.0),
+            "pages": vision_payload.get("pages", 1),
+            "word_count": vision_payload.get("word_count", 0),
+            "detections": vision_payload.get("detections", 0),
+        }
+
     return result
+
+
+def _structured_from_docai(docai_payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not docai_payload:
+        return {}
+
+    key_values = docai_payload.get("key_values") or {}
+    items = _items_from_tables(docai_payload.get("tables") or [])
+
+    def find_value(*candidates: str) -> Optional[str]:
+        for candidate in candidates:
+            for key, value in key_values.items():
+                if candidate in key:
+                    return value.strip()
+        return None
+
+    client = find_value(
+        "bill to",
+        "buyer",
+        "client",
+        "consignee",
+        "customer",
+        "buyer name",
+    )
+    po_number = find_value("po no", "po number", "purchase order", "order number")
+    payment_terms = find_value("payment terms", "terms")
+    total_value = None
+
+    total_raw = find_value("total", "grand total", "total amount", "total value")
+    if total_raw:
+        try:
+            total_value = float(total_raw.replace(",", "").split()[0])
+        except ValueError:
+            total_value = None
+
+    return {
+        "client": client,
+        "po_number": po_number,
+        "terms": payment_terms,
+        "total_value": total_value,
+        "items": items,
+    }
+
+
+def _items_from_tables(tables: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    if not tables:
+        return []
+
+    normalized_rows: List[Dict[str, Any]] = []
+    for table in tables:
+        header = [h.lower() for h in table.get("header", []) or []]
+        if not header:
+            continue
+
+        column_map = {}
+        for idx, name in enumerate(header):
+            if 'description' in name or 'item' in name:
+                column_map['description'] = idx
+            elif 'qty' in name or 'quantity' in name:
+                column_map['quantity'] = idx
+            elif 'unit price' in name or 'rate' in name:
+                column_map['unit_price'] = idx
+            elif 'amount' in name or 'total' in name:
+                column_map['total'] = idx
+
+        if 'description' not in column_map:
+            continue
+
+        for row in table.get("rows", []) or []:
+            item = {}
+            desc_idx = column_map['description']
+            if desc_idx < len(row):
+                item['description'] = row[desc_idx].strip()
+
+            qty_idx = column_map.get('quantity')
+            if qty_idx is not None and qty_idx < len(row):
+                try:
+                    item['quantity'] = float(row[qty_idx].replace(',', ''))
+                except (ValueError, AttributeError):
+                    item['quantity'] = row[qty_idx]
+
+            unit_idx = column_map.get('unit_price')
+            if unit_idx is not None and unit_idx < len(row):
+                try:
+                    item['unit_price'] = float(row[unit_idx].replace(',', ''))
+                except (ValueError, AttributeError):
+                    item['unit_price'] = row[unit_idx]
+
+            total_idx = column_map.get('total')
+            if total_idx is not None and total_idx < len(row):
+                try:
+                    item['total'] = float(row[total_idx].replace(',', ''))
+                except (ValueError, AttributeError):
+                    item['total'] = row[total_idx]
+
+            if item.get('description'):
+                normalized_rows.append(item)
+
+    return normalized_rows
+
+
+def _clean_excerpt(text: str, limit: int = 1200) -> str:
+    if not text:
+        return ""
+    collapsed = " ".join(text.split())
+    return collapsed[:limit]

@@ -235,8 +235,13 @@ mtr -r -c 10 <service_domain>  # Better than traceroute
 # PostgreSQL
 psql -h <host> -U <user> -d <database> -c "SELECT 1;"
 
-# MySQL
-mysql -h <host> -u <user> -p<password> -e "SELECT 1;"
+# MySQL (password will be prompted interactively for security)
+mysql -h <host> -u <user> -p -e "SELECT 1;"
+# Alternative secure methods:
+# 1. Use mysql_config_editor for encrypted login paths: mysql_config_editor set --login-path=prod --host=<host> --user=<user> --password
+#    Then connect with: mysql --login-path=prod -e "SELECT 1;"
+# 2. Store credentials in ~/.my.cnf with restricted permissions (chmod 600)
+# Note: Using MYSQL_PWD environment variable or inline passwords (-p<password>) is discouraged in production
 
 # Check database server status
 systemctl status postgresql  # or mysql, mariadb
@@ -247,8 +252,11 @@ docker ps | grep postgres  # For containerized DB
 psql -h <host> -U <user> -d <database> -c "SELECT count(*) FROM pg_stat_activity;"
 psql -h <host> -U <user> -d <database> -c "SELECT * FROM pg_stat_activity WHERE state = 'active';"
 
-# MySQL
-mysql -h <host> -u <user> -p<password> -e "SHOW PROCESSLIST;"
+# MySQL (password will be prompted interactively for security)
+mysql -h <host> -u <user> -p -e "SHOW PROCESSLIST;"
+# For non-interactive environments, export MYSQL_PWD='<password>' in a secure session before running:
+# export MYSQL_PWD='<password>' && mysql -h <host> -u <user> -e "SHOW PROCESSLIST;" && unset MYSQL_PWD
+# Or use mysql_config_editor for encrypted credentials (recommended for production)
 
 # Check for long-running queries
 # PostgreSQL
@@ -461,6 +469,16 @@ tcpdump -i any -nn -A port <service_port> | tee /tmp/traffic.log
 tcpdump -r /tmp/capture.pcap -nn
 ```
 
+**⚠️ SECURITY WARNING - Packet Capture Best Practices:**
+- **Apply strict capture filters:** Limit by specific ports, IPs, and protocols to minimize sensitive data collection (e.g., `tcpdump -i any 'port 80 and host 10.0.1.5'`)
+- **Avoid full payload capture when possible:** Use `-s 96` to capture only headers, not full packet contents
+- **Secure storage:** Store capture files in a secure location with restricted permissions (`chmod 600 /tmp/capture.pcap`)
+- **Encrypt at rest:** Consider encrypting capture files, especially if they contain authentication tokens or PII
+- **Limit access:** Only grant access to named investigators; maintain an access log
+- **Retention policy:** Define and enforce a retention period (e.g., 7 days); securely delete captures after analysis
+- **Secure deletion:** Use `shred -vfz -n 3 /tmp/capture.pcap` instead of `rm` to overwrite data
+- **Redaction before sharing:** Use approved tooling to redact sensitive data before sharing captures with third parties
+
 ---
 
 ## Phase 6: Immediate Mitigation Actions (While Investigating)
@@ -506,9 +524,33 @@ redis-cli FLUSHALL  # Use with caution
 
 #### 3. **If Database Issues**
 ```bash
-# Kill long-running queries
-# PostgreSQL
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'active' AND query_start < now() - interval '5 minutes';
+# Kill long-running queries (use targeted, coordinated approach)
+# PostgreSQL - STEP 1: Identify candidate sessions for termination
+# Query to find problematic sessions (customize filters for your use case):
+SELECT pid, usename, datname, application_name, state, query_start, now() - query_start AS duration, query
+FROM pg_stat_activity
+WHERE state = 'active'
+  AND query_start < now() - interval '5 minutes'
+  AND datname = '<target_database>'  -- Filter by database
+  AND usename = '<target_user>'      -- Filter by user (optional)
+  AND application_name LIKE '%<pattern>%'  -- Filter by application (optional)
+  AND query NOT LIKE '%pg_stat_activity%'  -- Exclude monitoring queries
+ORDER BY duration DESC;
+
+# STEP 2: Attempt graceful cancellation first (allows transactions to rollback cleanly)
+SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE pid IN (<pid1>, <pid2>, ...);
+-- Wait 10-30 seconds and re-check if queries have stopped
+
+# STEP 3: Only if graceful cancellation fails, terminate forcefully (kills connection immediately)
+-- ⚠️ CONFIRM WITH STAKEHOLDERS BEFORE EXECUTING
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid IN (<pid1>, <pid2>, ...);
+
+# CHECKLIST before terminating:
+# [ ] Validated PIDs belong to the problematic queries (not critical batch jobs)
+# [ ] Notified application owners/operations team
+# [ ] Documented filters used (database, user, application_name, query pattern)
+# [ ] Recorded terminated PIDs and reasons in incident log
+# [ ] Tested in staging environment if time permits
 
 # Add read replicas for read-heavy workloads
 # (Depends on cloud provider or setup)
@@ -537,8 +579,39 @@ SELECT pg_reload_conf();
 # NGINX example:
 limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
 
-# Block specific IPs (if identified as malicious)
-iptables -A INPUT -s <malicious_ip> -j DROP
+# Block specific IPs - REQUIRES VALIDATION AND SAFEGUARDS
+# ⚠️ WARNING: Blocking IPs without proper validation can disrupt legitimate traffic from CDNs, proxies, or entire user segments
+
+# VALIDATION CHECKLIST (complete BEFORE blocking):
+# [ ] Checked request logs to confirm malicious activity from this IP
+# [ ] Verified geolocation and ASN (Autonomous System Number) of the IP
+# [ ] Performed reverse DNS lookup: `dig -x <malicious_ip>`
+# [ ] Cross-referenced against known CDN/proxy/hosting provider IP ranges (CloudFlare, AWS, Akamai, etc.)
+# [ ] Checked internal whitelist for legitimate infrastructure IPs
+# [ ] Confirmed with security team or senior engineer
+# [ ] Documented justification and approval in incident log
+
+# RECOMMENDED: Use time-limited blocking with fail2ban or custom scripts
+# fail2ban automatically removes blocks after a timeout:
+# fail2ban-client set <jail_name> banip <malicious_ip>
+
+# TEMPORARY BLOCK (manual, with timestamp for removal):
+iptables -A INPUT -s <malicious_ip> -j DROP -m comment --comment "Blocked $(date +%Y-%m-%d_%H:%M) - Ticket #1234 - Approved by: <name>"
+# Document removal time and set reminder to review
+
+# TEST IN STAGING FIRST (if possible):
+# Apply the rule in a test environment to verify no collateral impact
+
+# MONITORING & ROLLBACK:
+# Monitor for collateral impact on legitimate users:
+# - Watch error rates, successful auth attempts, traffic patterns
+# - Set alerts for sudden drops in legitimate traffic
+# If legitimate traffic is blocked, immediately remove the rule:
+iptables -D INPUT -s <malicious_ip> -j DROP
+
+# AUDIT LOGGING:
+# Log all block actions with justification:
+echo "$(date +%Y-%m-%d_%H:%M:%S) - Blocked IP: <malicious_ip> - Reason: <reason> - Approved by: <name> - Ticket: #1234" >> /var/log/ip_blocks.log
 
 # Enable CloudFlare DDoS protection (if using)
 # Or enable AWS Shield, etc.

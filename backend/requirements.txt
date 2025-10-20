@@ -6,6 +6,7 @@ python-dotenv
 google-auth-oauthlib
 google-api-python-client
 google-cloud-documentai
+google-cloud-vision
 openai
 PyPDF2
 pdfplumber

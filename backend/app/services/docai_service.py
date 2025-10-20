@@ -91,10 +91,51 @@ def process_document(file_bytes: bytes, mime_type: str) -> Dict[str, object]:
             }
         )
 
+    key_values: Dict[str, str] = {}
+    tables: List[Dict[str, object]] = []
+
+    for page in getattr(document, "pages", []) or []:
+        for form_field in getattr(page, "form_fields", []) or []:
+            name = _layout_to_text(document, form_field.field_name)
+            value = _layout_to_text(document, form_field.field_value)
+            if name and value:
+                key_values.setdefault(name.lower(), value)
+
+        for table in getattr(page, "tables", []) or []:
+            header_rows = getattr(table, "header_rows", []) or []
+            header = []
+            if header_rows:
+                first_header = header_rows[0]
+                header = [_layout_to_text(document, cell.layout) for cell in first_header.cells]
+
+            rows_data = []
+            for row in getattr(table, "body_rows", []) or []:
+                row_values = [_layout_to_text(document, cell.layout) for cell in row.cells]
+                rows_data.append(row_values)
+
+            if header or rows_data:
+                tables.append({"header": header, "rows": rows_data})
+
     return {
         "text": text,
         "entities": entities,
         "mime_type": mime_type,
         "pages": len(getattr(document, "pages", []) or []),
+        "key_values": key_values,
+        "tables": tables,
     }
 
+
+def _layout_to_text(document, layout) -> str:
+    if not layout:
+        return ""
+    text_anchor = getattr(layout, "text_anchor", None)
+    if not text_anchor:
+        return ""
+    segments = getattr(text_anchor, "text_segments", []) or []
+    text = []
+    for segment in segments:
+        start_index = int(getattr(segment, "start_index", 0))
+        end_index = int(getattr(segment, "end_index", 0))
+        text.append(document.text[start_index:end_index])
+    return "".join(text).strip()

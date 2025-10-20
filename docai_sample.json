@@ -1,0 +1,34 @@
+{
+  "po_number": "RT",
+  "date": null,
+  "client": null,
+  "items": [],
+  "total_value": 1680.0,
+  "terms": null,
+  "raw_text": "KUTCH HIGHWAY TRANSPORT CO.\nGOODS CONSIGNMENT NOTE\nSat Guru Teri Ot\nHEAD OFFICE: Plot No. 319, Sector 1-A, - GANDHIDHAM.GST:24AAEFK2523J1ZL \nPAN NO: AAEFK2523J\nG 10/52223\nEwaybill No.\nFromarkhej\nCONSIGNOR NUJ TRADERS O\nfamakhiali\nDate-10-20025 TETE\nSIIN 24AABEA7319MIZG\nCONSIGNEELECTROTHERM (1) LTD. O\nGSTIN: 24AAACE2669LIZI\nNo. Of\nArticals\nNature of Goods said to contains\nKate\n14\nWeight\nArtical Kg.\nTARTOON BOX of CERAMIC\nFreight\nper art/per Kg\nTo pay\n14\nPaid\nTO PAY\n120/An\n1680\nSV Paid By: Consignee XeR-eart\nINVOICE NO\nAdd Freight\n0\nCharged Kg\nBuilty/O.C\n0\n0\nD.D.\n0\nse nala\nY QR si5 42 52g.\niz slots de 8.\nDelivered at Ta Camabhiali\nG.S.T\n0\nAl\nOwners\nRisk\nTOTAL\n1680\n(1) This G.C. Note issued to the Terms & Conditions Printed overleaf which shall be bounding as well at theWe are not responsible for any Glass & Liquid (3) E. & O.E. \nSubject to Gandhidham Jurisdiction\nValue Rs.\nnsignee\nUNLOADING BY PARTY\nFor, KLITCH HIGHWAY TRANSPORT CO\nOSS V\nFG. DAT\nEXPIRY\n",
+  "source_filename": "IMG-20251010-WA0011.jpg",
+  "extraction_method": "docai",
+  "po_signals": {
+    "has_po_number": true,
+    "has_date": false,
+    "has_client": false,
+    "text_length": 965,
+    "po_keywords_found": [
+      "invoice",
+      "total"
+    ],
+    "confidence_score": 0.5
+  },
+  "text_length": 965,
+  "docai": {
+    "entities": [
+      {
+        "type": "generic_entities",
+        "mentionText": "",
+        "confidence": 0.0,
+        "normalizedValue": null
+      }
+    ],
+    "pages": 1
+  }
+}

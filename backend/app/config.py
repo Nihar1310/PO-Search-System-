@@ -24,6 +24,8 @@ class Settings:
     DOCAI_PROCESSOR_ID: str
     DOCAI_PROCESSOR_VERSION: str
     DOCAI_API_ENDPOINT: str
+    USE_VISION: bool
+    VISION_PROJECT_ID: str
 
     def __init__(self) -> None:
         self.GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -46,6 +48,8 @@ class Settings:
         self.DOCAI_PROCESSOR_ID = os.getenv("DOCAI_PROCESSOR_ID", "")
         self.DOCAI_PROCESSOR_VERSION = os.getenv("DOCAI_PROCESSOR_VERSION", "")
         self.DOCAI_API_ENDPOINT = os.getenv("DOCAI_API_ENDPOINT", "")
+        self.USE_VISION = os.getenv("USE_VISION", "false").lower() == "true"
+        self.VISION_PROJECT_ID = os.getenv("VISION_PROJECT_ID", "")
 
 
 @lru_cache(maxsize=1)

@@ -1,0 +1,32 @@
+{
+  "po_number": "-",
+  "date": null,
+  "client": "Name & Address",
+  "items": [],
+  "total_value": 63600.0,
+  "terms": "Payment Terms:45 DAYS CREDIT",
+  "raw_text": "AIA ENGINEERING LTD Purchase Order - Domestic\nGSTIN: 24AABCA2777J1ZO\nPurchase Office:70-77,Maha Gujarat Industrial Estate,Sarkhej-Bavla Road,N.H.No.8A,Village Moraiya-382213.Dist.Ahmedabad,G ujarat.\nTelefax:02717-251757 Ph:02717-667100/251758-358 Email purchase@aiaengineering.com. Web site:www.aiaengineering.com\nOur Banker's Name & Address:State Bank Of India G.V.M.M. Estate Branch ODHAV,Ahmedabad-382410.BR Code:1354.\nVendor Name & Address:(201114)\nANUJ TRADERS , P.O. NO. :4500479488 /0 Date: 13.10.2025\n581, BHATIAWADI, Your Reference:\nRAILWAYPURA, Our Reference : VENDX\nAHMEDABAD-380002, Contact Person:Dasrath Patel\nPh:79-22149895,179-22149235. Ph:2717 # 251698 / 99 M: 9723430225\nGSTIN:24AABFA7319M1ZG\nPAN NO.:AABFA7319M\nE-Mail ID:ANUJ-TRADERS@LYCOS.COM E-mail Address: drp@aiaengineering.com\nVendor Sales Person:MR.ANUJ DESAI Account related query : accountsquery@aiaengineering.co m\nConsignee:AIA ENGINEERING LTD. (U12),\nCIN no: L29259GJ1991PLC015182\n127/128/129/129A/130E1,\nG.V.M.M. ESTATE, ODHAV ROAD, ODHAV,\nAHMEDABAD, 382415,Ph: 79-22901078, 79-22901077.\nSR.NO ITEM CODE ITEM DESCRIPTION UOM QTY UNIT RATE CURRENCY % OR DELIVERY DATE\n. HSN PER UOM Value\nDISC.\n10 02MB00020 COIL COAT POWDER KG 600 106.00 () INR 09.11.2025*\n38160000\nCALDERYES MAKE A BAG PACKING OF 25 KG WITH TC Tax Text :18 % SGST+CGST - CR\nTotal P.O.Amount(Excluding Tax):SIXTY THREE THOUSAND SIX HUNDRED RUPEES\nTotal P.O. Amount (Excluding Tax): INR 63,600.00\nRates:EXW EX OUR WORK\nPacking : Nil Loading : Nil\nForwarding : Nil Freight : Nil\nInsurance : Nil Unloading : Nil\nWarranties:\nPayment Terms:45 DAYS CREDIT\nMode of Transport/Freight Vendor : BY ROAD AND UNLOADING BY AIA\nSpecial Payment Terms :\nRemarks:FOR MELT.\nDELIVERY AS EARLIEST\nPlease send the acceptance of this PO within 7 days.\nItem code & description as mentioned in PO must be shown in your Delivery Challan & Invoice\nMaterial must accompany with your Commercial Invoice/Delivery Challan/Inspection Report ..............\nMaterial without Delivery Challan & Invoice will not be accepted\nMATERIAL RECEIPT TIMING 9:30 A.M. TO 4.00 PM ( Except weekly holiday & public holidays )\nAs per requirement of Section # 34 of CGST Act, read with Rule 53 of CGST Rules, 2017, it is mandatory to issue Credit note against debit\nnote raised by AIAL. In such case,\nDirector: Authorized By: Purchase Officer:\nAll disputes arising in respect of this order shall be decided by the competent court in Ahmedabad and shall be subject to\nAhmedabad jurisdiction only or Ahmedabad courts.\nThis is a system generated PO duly approved by concern authorities, hence no signatures required.\nRegd. Office: 115, G.V.M.M Estate, Odhav Road, Ahmedabad # 382410 Phone: +91-79-22901078-82 Fax: +91-79-22901077\nPurchaser may issue instructions to Supplier to dispatch part quantity of ordered goods from time to time. Prices may be varied by mutual\nagreement between the Supplier and Purchaser if the entire quantity is not purchased within the specified delivery period mentioned in the PO.\nPage No: 1 / 3. PO No.:4500479488 Date: 15.10.2025\nGENERAL TERMS OF PURCHASE:\n1. Supplier shall quote the Purchase Order (PO) number on delivery challans, bills and on any other document/correspondence in connection\nwith this order. If the Supplier omits to mention the PO number, in the event of any dispute, the Purchaser's decision will be final.\n2. The Company does not accept any responsibility for any order unless it is issued on Company's official P.O. duly signed and released by\nauthorised official of the company. However, no physical signature is required in case of electronic copy generated through system.\n3. Supplier shall acknowledge acceptance of this order delivery of ordered material / service. Absence of such acknowledgement shall\nconstitute acceptance by the Supplier of\nthe terms and conditions herein.\n4. Company's decision on approval of the material with respect to quality and quantity will be final and binding to the Supplier, even if\npayment is made in advance before\nsuch approval.\n5. Unless otherwise agreed to in writing, weight declared by the weighbridges nominated by the Company or weights and measurements taken\nat Company's premises shall be\nfinal to ascertain the quantity of material received.\n6. Supplier shall generate IRN basis the GST provisions and applicability laid down by the Government in this regard. Further, if applicable, all\nthe invoices raised by your\ncompany on AIA should have IRN and valid QR code. If the IRN and/or QR code are not present on the invoice or are found to be invalid,\nAIA would have the rights to withhold\npayments or recover any amount already paid by way of raising debit notes.\n7. Supplier shall be prompt in discharging all GST liability. Since availment of input tax credit of the tax charged by you is dependent on the\nmatching of invoices uploaded by you\nin GSTR-1, we request you to kindly have the processes in place to upload all invoices as are raised on AIA on timely basis. If any input tax\ncredit is d",
+  "source_filename": "PO 4500479488 version 00000000.PDF",
+  "extraction_method": "pdf_native",
+  "po_signals": {
+    "has_po_number": true,
+    "has_date": false,
+    "has_client": true,
+    "text_length": 11521,
+    "po_keywords_found": [
+      "purchase order",
+      "po number",
+      "p.o.",
+      "invoice",
+      "vendor",
+      "supplier",
+      "quantity",
+      "total",
+      "tax",
+      "payment terms",
+      "delivery date"
+    ],
+    "confidence_score": 0.8
+  },
+  "text_length": 11521
+}
