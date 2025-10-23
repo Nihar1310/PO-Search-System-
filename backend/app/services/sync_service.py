@@ -22,27 +22,38 @@ def perform_sync(
     drive_query: Optional[str] = None,
     gmail_limit: int = 30,
     drive_limit: int = 30,
+    drive_folder_id: Optional[str] = None,
+    enable_gmail: bool = True,
+    enable_drive: bool = True,
 ) -> Dict[str, object]:
     """
     Perform synchronization of Purchase Order documents from Gmail and Google Drive.
     
     This function:
     1. Searches Gmail for PO-related email attachments
-    2. Searches Google Drive for PO-related files
+    2. Searches Google Drive for PO-related files (optionally from specific folder)
     3. Ingests found files into the database
     4. Tracks successes, duplicates, and errors
     
     Args:
         db: Database session
         gmail_query: Custom Gmail search query (optional)
-        drive_query: Custom Drive search query (optional)
+        drive_query: Custom Drive search query (optional, ignored if drive_folder_id is set)
         gmail_limit: Maximum Gmail messages to fetch
         drive_limit: Maximum Drive files to fetch
+        drive_folder_id: Specific Google Drive folder ID to sync from (optional)
         
     Returns:
         Dictionary containing sync summary with sources, counts, and errors
     """
-    logger.info(f"Starting sync operation (gmail_limit={gmail_limit}, drive_limit={drive_limit})")
+    logger.info(
+        "Starting sync operation (gmail_limit=%s, drive_limit=%s, folder_id=%s, enable_gmail=%s, enable_drive=%s)",
+        gmail_limit,
+        drive_limit,
+        drive_folder_id or 'all',
+        enable_gmail,
+        enable_drive,
+    )
     
     summary = {
         "sources": {
@@ -71,42 +82,58 @@ def perform_sync(
     start_time = time.time()
 
     # Fetch from Gmail
-    logger.info("Fetching attachments from Gmail...")
-    try:
-        gmail_results = gmail_service.search_gmail(
-            gmail_query or DEFAULT_GMAIL_QUERY,
-            max_results=gmail_limit
-        )
-        summary["sources"]["gmail"]["fetched"] = len(gmail_results)
-        remote_files.extend(gmail_results)
-        logger.info(f"Gmail fetch completed: {len(gmail_results)} attachments found")
-    except RuntimeError as exc:
-        error_msg = str(exc)
-        summary["sources"]["gmail"]["error"] = error_msg
-        logger.error(f"Gmail fetch failed: {error_msg}", exc_info=True)
-    except Exception as exc:
-        error_msg = f"Unexpected error during Gmail fetch: {exc}"
-        summary["sources"]["gmail"]["error"] = error_msg
-        logger.error(error_msg, exc_info=True)
+    if enable_gmail:
+        logger.info("Fetching attachments from Gmail...")
+        try:
+            gmail_results = gmail_service.search_gmail(
+                gmail_query or DEFAULT_GMAIL_QUERY,
+                max_results=gmail_limit
+            )
+            summary["sources"]["gmail"]["fetched"] = len(gmail_results)
+            remote_files.extend(gmail_results)
+            logger.info(f"Gmail fetch completed: {len(gmail_results)} attachments found")
+        except RuntimeError as exc:
+            error_msg = str(exc)
+            summary["sources"]["gmail"]["error"] = error_msg
+            logger.error(f"Gmail fetch failed: {error_msg}", exc_info=True)
+        except Exception as exc:
+            error_msg = f"Unexpected error during Gmail fetch: {exc}"
+            summary["sources"]["gmail"]["error"] = error_msg
+            logger.error(error_msg, exc_info=True)
+    else:
+        summary["sources"]["gmail"]["skipped"] = summary["sources"]["gmail"].get("skipped", 0) + 1
+        summary["sources"]["gmail"]["reason"] = "disabled"
+        logger.info("Gmail sync disabled; skipping Gmail fetch")
 
     # Fetch from Drive
-    logger.info("Fetching files from Google Drive...")
-    try:
-        drive_results = drive_service.search_drive(
-            drive_query or DEFAULT_DRIVE_QUERY,
-            page_size=drive_limit
-        )
-        summary["sources"]["drive"]["fetched"] = len(drive_results)
-        remote_files.extend(drive_results)
-        logger.info(f"Drive fetch completed: {len(drive_results)} files found")
-    except RuntimeError as exc:
-        error_msg = str(exc)
-        summary["sources"]["drive"]["error"] = error_msg
-        logger.error(f"Drive fetch failed: {error_msg}", exc_info=True)
-    except Exception as exc:
-        error_msg = f"Unexpected error during Drive fetch: {exc}"
-        summary["sources"]["drive"]["error"] = error_msg
-        logger.error(error_msg, exc_info=True)
+    if enable_drive:
+        if drive_folder_id:
+            logger.info(f"Fetching files from specific Google Drive folder: {drive_folder_id}")
+        else:
+            logger.info("Fetching files from Google Drive (all accessible files)...")
+        
+        try:
+            drive_results = drive_service.search_drive(
+                drive_query or DEFAULT_DRIVE_QUERY,
+                page_size=drive_limit,
+                folder_id=drive_folder_id
+            )
+            summary["sources"]["drive"]["fetched"] = len(drive_results)
+            summary["sources"]["drive"]["folder_id"] = drive_folder_id
+            remote_files.extend(drive_results)
+            logger.info(f"Drive fetch completed: {len(drive_results)} files found")
+        except RuntimeError as exc:
+            error_msg = str(exc)
+            summary["sources"]["drive"]["error"] = error_msg
+            logger.error(f"Drive fetch failed: {error_msg}", exc_info=True)
+        except Exception as exc:
+            error_msg = f"Unexpected error during Drive fetch: {exc}"
+            summary["sources"]["drive"]["error"] = error_msg
+            logger.error(error_msg, exc_info=True)
+    else:
+        summary["sources"]["drive"]["skipped"] = summary["sources"]["drive"].get("skipped", 0) + 1
+        summary["sources"]["drive"]["reason"] = "disabled"
+        logger.info("Drive sync disabled; skipping Drive fetch")
 
     summary["total_files_found"] = len(remote_files)
     

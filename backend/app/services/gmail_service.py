@@ -40,12 +40,17 @@ def search_gmail(query: str, max_results: int = 10, max_retries: int = 3) -> Lis
     
     Args:
         query: Gmail search query
-        max_results: Maximum number of messages to retrieve
+        max_results: Maximum number of messages to retrieve (set to 0 to skip Gmail)
         max_retries: Maximum number of retry attempts for failed API calls
         
     Returns:
         List of attachment dictionaries with metadata
     """
+    # Skip Gmail search if max_results is 0
+    if max_results == 0:
+        logger.info("Skipping Gmail search (max_results=0)")
+        return []
+    
     logger.info(f"Starting Gmail search with query: '{query}', max_results: {max_results}")
     service = _build_service()
     

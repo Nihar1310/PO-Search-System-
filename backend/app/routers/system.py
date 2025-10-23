@@ -12,6 +12,7 @@ from ..database import get_db
 from ..models import PO
 from ..services import sync_service
 from ..utils import auth
+from .auth_local import get_current_user
 
 
 router = APIRouter(tags=["system"])
@@ -172,6 +173,9 @@ class SyncRequest(BaseModel):
     drive_query: Optional[str] = None
     gmail_limit: int = 30
     drive_limit: int = 30
+    drive_folder_id: Optional[str] = None  # Specific Drive folder ID to sync from
+    enable_gmail: bool = True
+    enable_drive: bool = True
 
 
 class SyncResponse(BaseModel):
@@ -183,6 +187,7 @@ class SyncResponse(BaseModel):
 def sync_sources(
     payload: SyncRequest = Body(default=SyncRequest()),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     summary = sync_service.perform_sync(
         db,
@@ -190,6 +195,9 @@ def sync_sources(
         drive_query=payload.drive_query,
         gmail_limit=payload.gmail_limit,
         drive_limit=payload.drive_limit,
+        drive_folder_id=payload.drive_folder_id,
+        enable_gmail=payload.enable_gmail,
+        enable_drive=payload.enable_drive,
     )
 
     status = "completed"
@@ -202,7 +210,7 @@ def sync_sources(
 
 
 @router.get("/api/analytics")
-def analytics(db: Session = Depends(get_db)):
+def analytics(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     total_pos = db.query(func.count(PO.id)).scalar() or 0
     total_value = db.query(func.coalesce(func.sum(PO.total_value), 0)).scalar() or 0.0
     latest_created = db.query(func.max(PO.created_at)).scalar()

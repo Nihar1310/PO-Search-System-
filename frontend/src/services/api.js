@@ -4,7 +4,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 
 const client = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
+  timeout: 10000, // 10 second timeout
 })
+
+client.defaults.withCredentials = true
 
 export { API_BASE_URL }
 
@@ -44,12 +48,17 @@ export async function disconnectAuth() {
   return data
 }
 
-export async function triggerSync() {
-  const { data } = await client.post('/api/sync')
+export async function triggerSync(options = {}) {
+  const { data } = await client.post('/api/sync', options)
   return data
 }
 
 export async function getAnalytics() {
   const { data } = await client.get('/api/analytics')
+  return data
+}
+
+export async function getSession() {
+  const { data } = await client.get('/auth/session')
   return data
 }

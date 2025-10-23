@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search,
@@ -8,7 +8,8 @@ import {
   FileText,
   Users,
   Calendar,
-  DollarSign
+  DollarSign,
+  LogOut
 } from 'lucide-react'
 import ChatInterface from './components/ChatInterface'
 import SearchBar from './components/SearchBar'
@@ -16,7 +17,8 @@ import POResultCard from './components/POResultCard'
 import ConnectionPanel from './components/ConnectionPanel'
 import GlassButton from './components/GlassButton'
 import LogoIcon from './components/LogoIcon'
-import { getAuthStatus, getAnalytics } from './services/api'
+import { API_BASE_URL, getAuthStatus, getAnalytics, triggerSync, getSession, logout } from './services/api'
+import LoginPage from './components/LoginPage'
 
 function App() {
   const [results, setResults] = useState([])
@@ -25,17 +27,72 @@ function App() {
   const [analytics, setAnalytics] = useState(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsError, setAnalyticsError] = useState(null)
+  const [session, setSession] = useState({ loading: false, user: null, error: null })
+
+  const autoSyncAttemptedRef = useRef(false)
+
+  const refreshAuthStatus = useCallback(async () => {
+    setAuthState((prev) => ({ ...prev, loading: true, error: null }))
+    try {
+      const status = await getAuthStatus()
+      setAuthState({ connected: Boolean(status.connected), loading: false, error: null })
+    } catch (error) {
+      console.log('Backend not available, running in demo mode')
+      setAuthState({ connected: false, loading: false, error: null })
+    }
+  }, [])
+
+  const fetchAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true)
+    setAnalyticsError(null)
+    try {
+      const data = await getAnalytics()
+      setAnalytics(data)
+    } catch (error) {
+      setAnalyticsError('Failed to load analytics data. Please check backend connectivity.')
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }, [])
+
+  const fetchSession = useCallback(async () => {
+    setSession((prev) => ({ ...prev, loading: true }))
+    try {
+      const data = await getSession()
+      setSession({ loading: false, user: data, error: null })
+    } catch (error) {
+      setSession({ loading: false, user: null, error: null })
+    }
+  }, [])
+
+  const handleLoginSuccess = useCallback((data) => {
+    setSession({ loading: false, user: data, error: null })
+    refreshAuthStatus()
+    fetchAnalytics()
+    fetchSession()
+  }, [refreshAuthStatus, fetchAnalytics, fetchSession])
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout()
+      setSession({ loading: false, user: null, error: null })
+      setAuthState({ connected: false, loading: false, error: null })
+      setAnalytics(null)
+    } catch (error) {
+      console.error('Logout failed:', error)
+    }
+  }, [])
 
   const formatCurrency = (value, options = {}) => {
     if (value == null || Number.isNaN(Number(value))) return '—'
     try {
-      return new Intl.NumberFormat('en-US', {
+      return new Intl.NumberFormat('en-IN', {
         style: 'currency',
-        currency: 'USD',
+        currency: 'INR',
         maximumFractionDigits: options.maximumFractionDigits ?? 0
       }).format(Number(value))
     } catch (err) {
-      return `$${Number(value).toLocaleString()}`
+      return `₹${Number(value).toLocaleString('en-IN')}`
     }
   }
 
@@ -109,54 +166,40 @@ function App() {
     }
   ]
 
-  const refreshAuthStatus = useCallback(async () => {
-    setAuthState((prev) => ({ ...prev, loading: true, error: null }))
-    try {
-      const status = await getAuthStatus()
-      setAuthState({ connected: Boolean(status.connected), loading: false, error: null })
-    } catch (error) {
-      console.log('Backend not available, running in demo mode')
-      setAuthState({ connected: false, loading: false, error: null })
-    }
-  }, [])
 
   useEffect(() => {
-    refreshAuthStatus()
-  }, [refreshAuthStatus])
+    if (session.user) {
+      refreshAuthStatus()
+    }
+  }, [refreshAuthStatus, session.user])
 
   useEffect(() => {
-    if (activeTab !== 'analytics' || analytics || analyticsLoading) {
-      return
+    if (!session.user) return
+    if (activeTab === 'analytics' && !analytics && !analyticsLoading) {
+      fetchAnalytics()
     }
+  }, [activeTab, analytics, analyticsLoading, fetchAnalytics, session.user])
 
-    let cancelled = false
-    const fetchAnalytics = async () => {
-      setAnalyticsLoading(true)
-      setAnalyticsError(null)
-      try {
-        const data = await getAnalytics()
-        if (!cancelled) {
-          setAnalytics(data)
+  useEffect(() => {
+    if (!session.user) return
+    if (!authState.loading && authState.connected && !autoSyncAttemptedRef.current) {
+      autoSyncAttemptedRef.current = true
+      ;(async () => {
+        try {
+          await triggerSync({ enable_gmail: false, enable_drive: true })
+          fetchAnalytics()
+        } catch (err) {
+          console.error('Automatic Drive sync failed', err)
         }
-      } catch (error) {
-        if (!cancelled) {
-          setAnalyticsError('Failed to load analytics data. Please check backend connectivity.')
-        }
-      } finally {
-        if (!cancelled) {
-          setAnalyticsLoading(false)
-        }
-      }
+      })()
     }
-
-    fetchAnalytics()
-
-    return () => {
-      cancelled = true
-    }
-  }, [activeTab, analytics, analyticsLoading])
+  }, [authState.loading, authState.connected, fetchAnalytics, session.user])
 
   const MotionGlassButton = motion(GlassButton)
+
+  useEffect(() => {
+    fetchSession()
+  }, [fetchSession])
 
   const tabs = [
     { id: 'search', label: 'Search', icon: Search },
@@ -220,7 +263,7 @@ function App() {
         },
         {
           label: 'Total Value',
-          value: `$${results.reduce((sum, po) => sum + (po.total_value || 0), 0).toLocaleString()}`,
+          value: formatCurrency(results.reduce((sum, po) => sum + (po.total_value || 0), 0)),
           icon: TrendingUp,
           color: 'text-purple-600'
         },
@@ -243,51 +286,80 @@ function App() {
   const sourceBreakdown = analytics?.source_breakdown ?? []
   const recentActivity = analytics?.recent_activity ?? []
 
+  if (session.loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-100">
+        <div className="text-sm text-slate-500">Preparing your workspace…</div>
+      </div>
+    )
+  }
+
+  if (!session.user) {
+    return <LoginPage onSuccess={handleLoginSuccess} errorMessage={session.error} />
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-slatey-50 via-slatey-100 to-electric-50 text-slate-900 dark:text-slate-100">
+      {/* Hero Header with breathing room */}
       <motion.header 
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="glass border-b border-white/20 backdrop-blur-md"
+        className="backdrop-blur-md"
       >
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-2xl bg-white/70 backdrop-blur-md flex items-center justify-center shadow-lg border border-white/60">
+        <div className="max-w-7xl mx-auto px-6 pt-10 pb-6">
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-[20px] bg-white/70 backdrop-blur-md flex items-center justify-center shadow-lg border border-white/60">
                 <LogoIcon size={36} />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">PO Search & Parsing</h1>
-                <p className="text-sm text-gray-600">Intelligent PO management with AI-powered search</p>
+                <h1 className="text-[28px] leading-8 font-semibold text-gray-900 tracking-[-0.01em]">PO Search & Parsing</h1>
+                <p className="mt-1 text-[13px] leading-5 text-gray-600">Intelligent PO management with AI-powered search</p>
               </div>
             </div>
-            
-            {/* Stats */}
-            <div className="hidden md:flex items-center space-x-6">
-              {stats.map((stat, index) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="text-center"
-                >
-                  <div className={`w-8 h-8 rounded-lg bg-white/50 flex items-center justify-center mx-auto mb-1`}>
-                    <stat.icon className={`w-4 h-4 ${stat.color}`} />
-                  </div>
-                  <div className="text-lg font-semibold text-gray-800">{stat.value}</div>
-                  <div className="text-xs text-gray-500">{stat.label}</div>
-                </motion.div>
-              ))}
+
+            <div className="flex items-center gap-3">
+              {/* Quick stats dock */}
+              <div className="hidden md:flex items-stretch rounded-[20px] border border-white/40 bg-white/60 backdrop-blur-lg shadow-inner px-3 py-2">
+                {stats.map((stat, index) => (
+                  <motion.div
+                    key={stat.label}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.06 }}
+                    className="flex items-center px-3"
+                  >
+                    <div className="w-8 h-8 rounded-[12px] bg-white/70 flex items-center justify-center mr-2 border border-white/60">
+                      <stat.icon className={`w-4 h-4 ${stat.color}`} />
+                    </div>
+                    <div className="leading-tight">
+                      <div className="text-sm font-semibold text-gray-800">{stat.value}</div>
+                      <div className="text-[11px] text-gray-500">{stat.label}</div>
+                    </div>
+                    {index < stats.length - 1 && <div className="mx-3 h-6 w-px bg-white/50" />}
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Logout button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 rounded-[16px] bg-white/60 backdrop-blur-lg border border-white/40 shadow-inner hover:bg-white/70 transition-all duration-120 ease-out-120"
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4 text-gray-700" />
+                <span className="text-sm font-medium text-gray-700 hidden lg:inline">Logout</span>
+              </motion.button>
             </div>
           </div>
         </div>
       </motion.header>
 
-      {/* Navigation Tabs */}
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center space-x-2 bg-white/40 rounded-2xl p-2 backdrop-blur-md border border-white/30 shadow-inner">
+      {/* Navigation Pills */}
+      <div className="max-w-7xl mx-auto px-6 pb-4">
+        <div className="flex items-center gap-2 bg-white/50 dark:bg-white/10 rounded-[20px] p-2 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-inner">
           {tabs.map((tab) => (
             <MotionGlassButton
               key={tab.id}
@@ -296,7 +368,7 @@ function App() {
               onClick={() => setActiveTab(tab.id)}
               variant={activeTab === tab.id ? 'primary' : 'ghost'}
               icon={tab.icon}
-              className={`px-5 py-2 text-sm font-medium ${activeTab === tab.id ? 'text-blue-900' : 'text-gray-600'}`}
+              className={`px-5 py-2 text-sm font-medium ${activeTab === tab.id ? 'text-gray-900' : 'text-gray-600'}`}
             >
               <span>{tab.label}</span>
             </MotionGlassButton>
@@ -304,8 +376,8 @@ function App() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 pb-8">
+      {/* Main Content aligned on baseline grid */}
+      <main className="max-w-7xl mx-auto px-6 pb-10">
         <AnimatePresence mode="wait">
           {activeTab === 'search' && (
             <motion.div
@@ -314,12 +386,11 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid lg:grid-cols-3 gap-6"
+              className="grid lg:grid-cols-12 gap-6"
             >
-              {/* Search Section */}
-              <section className="lg:col-span-1 space-y-6">
+              {/* Left rail: filters + results */}
+              <section className="lg:col-span-4 space-y-6">
                 <SearchBar onResults={setResults} />
-                
                 {/* Results */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -338,7 +409,7 @@ function App() {
                           <Search className="w-8 h-8 text-gray-400" />
                         </div>
                         <p className="text-gray-500 mb-2">No search results yet</p>
-                        <p className="text-sm text-gray-400 mb-4">Try searching for POs or use the AI chat</p>
+                        <p className="text-sm text-gray-400 mb-4">No Gmail sync yet—connect in Google Connection.</p>
                         <MotionGlassButton
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
@@ -359,8 +430,8 @@ function App() {
                 </div>
               </section>
 
-              {/* Chat Section */}
-              <section className="lg:col-span-2 space-y-6">
+              {/* Right: conversational workspace */}
+              <section className="lg:col-span-8 space-y-6">
                 <ConnectionPanel
                   authState={authState}
                   onRefresh={refreshAuthStatus}

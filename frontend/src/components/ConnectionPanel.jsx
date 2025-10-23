@@ -17,6 +17,8 @@ export default function ConnectionPanel({ authState, onRefresh }) {
   const [infoMessage, setInfoMessage] = useState(null)
   const [errorMessage, setErrorMessage] = useState(null)
   const [lastSync, setLastSync] = useState(null)
+  const [syncSources, setSyncSources] = useState({ gmail: true, drive: true })
+  const [newDocsDetected, setNewDocsDetected] = useState(false)
   const oauthWindowRef = useRef(null)
 
   useEffect(() => {
@@ -85,11 +87,18 @@ export default function ConnectionPanel({ authState, onRefresh }) {
   }
 
   const handleSync = async () => {
+    if (!syncSources.gmail && !syncSources.drive) {
+      setErrorMessage('Enable at least one source (Gmail or Drive) before syncing.')
+      return
+    }
     setBusyAction('sync')
     setErrorMessage(null)
     setInfoMessage(null)
     try {
-      const response = await triggerSync()
+      const response = await triggerSync({
+        enable_gmail: syncSources.gmail,
+        enable_drive: syncSources.drive,
+      })
       setLastSync(response)
       const { status, summary } = response
       const baseMessage = status === 'completed'
@@ -117,7 +126,7 @@ export default function ConnectionPanel({ authState, onRefresh }) {
   }
 
   return (
-    <div className="glass rounded-2xl shadow-xl border border-white/20 p-6 space-y-4">
+    <div className="glass rounded-[20px] shadow-xl border border-white/20 p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-medium">Google Connection</h2>
@@ -142,6 +151,27 @@ export default function ConnectionPanel({ authState, onRefresh }) {
         >
           {busyAction === 'refresh' ? 'Refreshing…' : 'Refresh Status'}
         </GlassButton>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {['gmail', 'drive'].map((source) => {
+          const active = syncSources[source]
+          const label = source === 'gmail' ? 'Gmail attachments' : 'Drive files'
+          return (
+            <button
+              key={source}
+              type="button"
+              onClick={() => setSyncSources((prev) => ({ ...prev, [source]: !prev[source] }))}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                active
+                  ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'
+              }`}
+            >
+              {active ? '✓' : '✕'} {label}
+            </button>
+          )
+        })}
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -177,7 +207,7 @@ export default function ConnectionPanel({ authState, onRefresh }) {
           loading={busyAction === 'sync'}
           onClick={handleSync}
           disabled={!authState.connected || busyAction === 'sync'}
-          className="px-6 py-2 text-sm"
+          className={`px-6 py-2 text-sm ${newDocsDetected ? 'animate-pulse' : ''}`}
         >
           {busyAction === 'sync' ? 'Syncing…' : 'Trigger Sync'}
         </GlassButton>
@@ -192,20 +222,36 @@ export default function ConnectionPanel({ authState, onRefresh }) {
             <span className="font-medium">Source</span>
             <span className="font-medium">Fetched</span>
           </div>
-          {['gmail', 'drive'].map((source) => (
-            <div key={source} className="flex justify-between text-xs md:text-sm">
-              <span className="capitalize">{source}</span>
-              <span>
-                {lastSync.summary.sources[source].fetched}
-                {lastSync.summary.sources[source].error && (
-                  <span className="text-red-500"> (error)</span>
-                )}
-              </span>
-            </div>
-          ))}
+          {['gmail', 'drive'].map((source) => {
+            const sourceSummary = lastSync.summary.sources[source] || {}
+            const disabled = sourceSummary.reason === 'disabled'
+            return (
+              <div key={source} className="flex justify-between items-center text-xs md:text-sm">
+                <span className="capitalize">
+                  {source}
+                  {disabled && <span className="ml-1 text-xs text-gray-400">(disabled)</span>}
+                </span>
+                <div className="flex-1 mx-3 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${source === 'gmail' ? 'bg-sky-400' : 'bg-indigo-400'}`}
+                    style={{ width: `${Math.min(100, (sourceSummary.fetched || 0) / Math.max(1, (lastSync.summary?.maxFetched || 100)) * 100)}%` }}
+                  />
+                </div>
+                <span className="tabular-nums">
+                  {sourceSummary.fetched ?? 0}
+                  {sourceSummary.error && (
+                    <span className="text-red-500"> (error)</span>
+                  )}
+                </span>
+              </div>
+            )
+          })}
           <div className="pt-2 border-t border-white/40 grid grid-cols-2 gap-2 text-xs md:text-sm">
             <div>New POs: <span className="font-semibold">{lastSync.summary.ingested}</span></div>
             <div>Duplicates: <span className="font-semibold">{lastSync.summary.duplicates}</span></div>
+            {lastSync.summary?.completed_at && (
+              <div className="col-span-2 text-gray-500">Synced {new Date(lastSync.summary.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            )}
           </div>
         </div>
       )}

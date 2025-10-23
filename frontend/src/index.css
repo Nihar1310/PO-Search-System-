@@ -5,18 +5,32 @@
 @tailwind utilities;
 
 :root {
-  --primary: #3b82f6;
-  --primary-dark: #2563eb;
-  --secondary: #8b5cf6;
-  --accent: #06b6d4;
-  --background: #f8fafc;
+  /* Palette: desaturated slate to electric blue */
+  --primary: #0ea5e9; /* electric.500 */
+  --primary-dark: #0369a1; /* electric.700 */
+  --secondary: #64748b; /* slate.500 as desaturated partner */
+  --accent: #22d3ee; /* cyan-400 for subtle accents */
+  --background: #f7f8fa; /* slatey.50 */
   --surface: #ffffff;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --border: #e2e8f0;
-  --success: #10b981;
-  --warning: #f59e0b;
+  --text-primary: #111827; /* gray-900 for contrast */
+  --text-secondary: #4b5563; /* gray-600 */
+  --border: #e5e7eb; /* gray-200 */
+  --success: #84cc16; /* muted lime */
+  --warning: #f59e0b; /* warm orange */
   --error: #ef4444;
+
+  /* Motion tokens */
+  --ease-standard: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quick: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-quick: 120ms;
+}
+
+.dark {
+  --background: #0b1220;
+  --surface: rgba(16, 24, 40, 0.7);
+  --text-primary: #e5e7eb;
+  --text-secondary: #94a3b8;
+  --border: rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -56,14 +70,22 @@ body {
 
 /* Glass morphism effect */
 .glass {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.55));
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 8px 24px rgba(0,0,0,0.08);
+}
+
+.dark .glass {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px rgba(2,6,23,0.45);
 }
 
 /* Gradient backgrounds */
 .gradient-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  background: linear-gradient(135deg, #0b1220 0%, var(--primary) 60%, #38bdf8 100%);
 }
 
 .gradient-surface {
@@ -195,7 +217,7 @@ body {
 
 .card-hover:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.08);
 }
 
 .chat-markdown {

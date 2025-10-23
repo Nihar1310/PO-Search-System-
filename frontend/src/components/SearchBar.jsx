@@ -28,6 +28,7 @@ export default function SearchBar({ onResults }) {
   ])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [rawResults, setRawResults] = useState([])
   const [filters, setFilters] = useState({
     sources: new Set(),
@@ -243,13 +244,14 @@ export default function SearchBar({ onResults }) {
     <AnimatePresence>
       {showFilters && (
         <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.2 }}
-          className="mt-4 space-y-5 rounded-2xl border border-white/40 bg-white/95 p-5 shadow-sm"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.24, ease: 'easeOut' }}
+          className="mt-4 overflow-hidden"
         >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="space-y-5 rounded-[20px] border border-white/50 bg-white/95 p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Filters</p>
               <p className="text-sm text-gray-500">Refine results by source, date range, or minimum PO value.</p>
@@ -312,21 +314,8 @@ export default function SearchBar({ onResults }) {
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
             </label>
-
-            <label className="flex flex-col gap-2 text-xs font-medium text-gray-600 sm:col-span-2">
-              <span className="inline-flex items-center gap-2 text-gray-600">
-                <DollarSign className="h-4 w-4 text-blue-500" /> Minimum total value (USD)
-              </span>
-              <input
-                type="number"
-                min="0"
-                value={filters.minValue}
-                placeholder="e.g. 5000"
-                onChange={(e) => updateFilters((prev) => ({ ...prev, minValue: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-            </label>
           </div>
+        </div>
         </motion.div>
       )}
     </AnimatePresence>
@@ -356,7 +345,7 @@ export default function SearchBar({ onResults }) {
   )
 
   return (
-    <div className="glass rounded-2xl shadow-xl border border-white/20 p-6 space-y-4">
+    <div className="glass rounded-[20px] shadow-xl border border-white/20 p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -385,7 +374,7 @@ export default function SearchBar({ onResults }) {
           </div>
           <input
             ref={inputRef}
-            className="w-full pl-12 pr-40 py-4 rounded-full border border-gray-200 bg-white/90 backdrop-blur-sm shadow-inner placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition"
+            className="w-full pl-12 pr-40 py-4 rounded-full border border-gray-200 bg-white/90 backdrop-blur-sm shadow-inner placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-400 transition"
             placeholder="Search by PO number, client name, keywords..."
             value={query}
             onChange={(e) => {

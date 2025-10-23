@@ -95,7 +95,7 @@ export default function POResultCard({ po, index = 0 }) {
     if (!dateString) return '—'
     try {
       const date = new Date(dateString)
-      return date.toLocaleDateString('en-US', { 
+      return date.toLocaleDateString('en-IN', { 
         month: 'short', 
         day: 'numeric', 
         year: 'numeric' 
@@ -122,77 +122,86 @@ export default function POResultCard({ po, index = 0 }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.1 }}
       whileHover={{ y: -2 }}
-      className="glass rounded-2xl shadow-lg border border-white/20 overflow-hidden card-hover"
+      className="glass rounded-[20px] shadow-lg border border-white/20 overflow-hidden card-hover"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Header */}
       <div className="p-6 border-b border-white/20">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <div className="flex items-center space-x-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-[12px] bg-gradient-to-br from-electric-500 to-sky-400 flex items-center justify-center">
                 <FileText className="w-5 h-5 text-white" />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800">
-                  {resolved.po_number || 'Unknown PO'}
+              <div className="min-w-0">
+                <h3 className="text-[17px] font-semibold text-gray-900 leading-6 truncate">
+                  {resolved.client_name || parsed.client_name || 'Unknown Supplier'}
                 </h3>
-                <p className="text-sm text-gray-500">{resolved.filename || 'No filename'}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-gray-600">
+                  <span className="font-medium text-gray-700">{resolved.po_number || 'Unknown PO'}</span>
+                  <span className="text-gray-300">•</span>
+                  <span>{formatDate(resolved.date)}</span>
+                  <span className="text-gray-300">•</span>
+                  <span>{formatCurrency(resolved.total_value ?? parsed.total_value)}</span>
+                </div>
               </div>
             </div>
           </div>
-          
-          <div className="flex items-center space-x-2">
-            <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getSourceColor(resolved.source)}`}>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className={`px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 ${getSourceColor(resolved.source)}`}>
               {getSourceIcon(resolved.source)}
               <span className="capitalize">{resolved.source || 'Unknown'}</span>
-            </div>
+            </span>
+            {resolved.created_at && (
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700">New</span>
+            )}
           </div>
         </div>
 
         {/* Key Info Grid */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
               <Calendar className="w-4 h-4 text-green-600" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">Date</p>
+              <p className="text-[11px] text-gray-500">Date</p>
               <p className="text-sm font-medium text-gray-800">{formatDate(resolved.date)}</p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
               <Building2 className="w-4 h-4 text-purple-600" />
             </div>
-            <div>
-              <p className="text-xs text-gray-500">Client</p>
+            <div className="min-w-0">
+              <p className="text-[11px] text-gray-500">Client</p>
               <p className="text-sm font-medium text-gray-800 truncate">
                 {resolved.client_name || parsed.client_name || 'Unknown'}
               </p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
               <DollarSign className="w-4 h-4 text-emerald-600" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">Total Value</p>
+              <p className="text-[11px] text-gray-500">Total Value</p>
               <p className="text-sm font-medium text-gray-800">
                 {formatCurrency(resolved.total_value ?? parsed.total_value)}
               </p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
               <Tag className="w-4 h-4 text-orange-600" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">Items</p>
+              <p className="text-[11px] text-gray-500">Items</p>
               <p className="text-sm font-medium text-gray-800">
                 {items.length || 0} line items
               </p>
@@ -340,12 +349,12 @@ export default function POResultCard({ po, index = 0 }) {
 function formatCurrency(value) {
   if (value == null || Number.isNaN(Number(value))) return '—'
   try {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
       maximumFractionDigits: 2,
     }).format(Number(value))
   } catch (err) {
-    return `$${value}`
+    return `₹${value}`
   }
 }

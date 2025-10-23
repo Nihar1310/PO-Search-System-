@@ -11,6 +11,12 @@ const STAGGER_STEP = 0.045
 const MAX_STAGGER_DELAY = 0.35
 
 const markdownComponents = {
+  h1: ({ node, ...props }) => (
+    <h1 className="text-[15px] font-semibold text-gray-900 mb-2" {...props} />
+  ),
+  h2: ({ node, ...props }) => (
+    <h2 className="text-[14px] font-semibold text-gray-900 mb-1.5" {...props} />
+  ),
   p: ({ node, ...props }) => (
     <p className="mb-2 last:mb-0" {...props} />
   ),
@@ -28,10 +34,15 @@ const markdownComponents = {
   ),
   code: ({ node, inline, ...props }) =>
     inline ? (
-      <code className="rounded bg-gray-100 px-1 py-0.5 text-xs" {...props} />
+      <code className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px]" {...props} />
     ) : (
       <code className="block rounded-md bg-gray-900/90 px-3 py-2 text-xs text-white" {...props} />
-    )
+    ),
+  table: ({ node, ...props }) => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm" {...props} />
+    </div>
+  )
 }
 
 const generateMessageId = () => {
@@ -82,7 +93,7 @@ const MessageBubble = memo(function MessageBubble({ message }) {
         </div>
 
         <div
-          className={`px-4 py-3 rounded-2xl ${
+          className={`px-4 py-3 rounded-[20px] ${
             isUser
               ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
               : isSystem
@@ -97,7 +108,12 @@ const MessageBubble = memo(function MessageBubble({ message }) {
             {message.content || ''}
           </ReactMarkdown>
           {message.structuredData && (
-            <div className="mt-2 text-xs opacity-75">Intent: {message.structuredData.intent}</div>
+            <div className="mt-2 text-[11px] text-gray-500 inline-flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{message.structuredData.intent || 'Info'}</span>
+              {message.structuredData.query && (
+                <span className="text-gray-500">Query: <span className="font-medium">{message.structuredData.query}</span></span>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -305,7 +321,7 @@ export default function ChatInterface({ onResults }) {
   return (
     <div className="glass rounded-2xl shadow-xl border border-white/20 flex flex-col h-[70vh] overflow-hidden">
       {/* Header */}
-      <div className="gradient-primary p-4 rounded-t-2xl">
+      <div className="gradient-primary p-4 rounded-t-[20px]">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
@@ -376,6 +392,17 @@ export default function ChatInterface({ onResults }) {
             className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg"
           >
             <p className="text-red-600 text-sm">{error}</p>
+          </motion.div>
+        )}
+        {!error && messages.length === 1 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3 p-4 rounded-[12px] border border-gray-200 bg-white/70 text-sm text-gray-600"
+          >
+            <p className="font-medium text-gray-700 mb-1">No conversation yet</p>
+            <p className="mb-2">Ask a question about your purchase orders to get started.</p>
+            <p className="text-[12px] text-gray-500">Tip: Try <span className="font-medium">Find POs from Gmail last month over $10k</span></p>
           </motion.div>
         )}
       </div>

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import PO
 from ..services.search_service import search_pos
+from .auth_local import get_current_user
 
 
 router = APIRouter(prefix="/api", tags=["search"])
@@ -30,7 +31,11 @@ class POSummary(BaseModel):
 
 
 @router.post("/search", response_model=List[POSummary])
-def search_endpoint(payload: SearchRequest, db: Session = Depends(get_db)):
+def search_endpoint(
+    payload: SearchRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     results: List[PO] = search_pos(db, payload.query)
     # Convert PO objects to POSummary with date serialization
     return [
@@ -45,4 +50,3 @@ def search_endpoint(payload: SearchRequest, db: Session = Depends(get_db)):
         )
         for po in results
     ]
-

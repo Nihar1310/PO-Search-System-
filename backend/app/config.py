@@ -24,6 +24,10 @@ class Settings:
     DOCAI_PROCESSOR_ID: str
     DOCAI_PROCESSOR_VERSION: str
     DOCAI_API_ENDPOINT: str
+    APP_SECRET_KEY: str
+    APP_ACCESS_TOKEN_EXPIRE_MINUTES: int
+    APP_ADMIN_USERNAME: str
+    APP_ADMIN_PASSWORD_HASH: str
     USE_VISION: bool
     VISION_PROJECT_ID: str
 
@@ -48,6 +52,12 @@ class Settings:
         self.DOCAI_PROCESSOR_ID = os.getenv("DOCAI_PROCESSOR_ID", "")
         self.DOCAI_PROCESSOR_VERSION = os.getenv("DOCAI_PROCESSOR_VERSION", "")
         self.DOCAI_API_ENDPOINT = os.getenv("DOCAI_API_ENDPOINT", "")
+        self.APP_SECRET_KEY = os.getenv("APP_SECRET_KEY", "dev-secret-change-me")
+        self.APP_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("APP_ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
+        self.APP_ADMIN_USERNAME = os.getenv("APP_ADMIN_USERNAME", "admin")
+        self.APP_ADMIN_PASSWORD = os.getenv("APP_ADMIN_PASSWORD", "admin123")
+        self.APP_ADMIN_PASSWORD_HASH = os.getenv("APP_ADMIN_PASSWORD_HASH", "")
+        self.APP_COOKIE_SECURE = os.getenv("APP_COOKIE_SECURE", "false").lower() == "true"
         self.USE_VISION = os.getenv("USE_VISION", "false").lower() == "true"
         self.VISION_PROJECT_ID = os.getenv("VISION_PROJECT_ID", "")
 
