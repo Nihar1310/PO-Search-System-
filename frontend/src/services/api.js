@@ -62,3 +62,8 @@ export async function getSession() {
   const { data } = await client.get('/auth/session')
   return data
 }
+
+export async function logout() {
+  const { data } = await client.post('/auth/logout')
+  return data
+}
