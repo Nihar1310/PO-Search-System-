@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, Integer, String, Date, DateTime, Float, JSON, Text, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Date, DateTime, Float, JSON, Text, ForeignKey, func, Boolean
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -42,3 +42,13 @@ class ChatMessage(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ..services import gpt_service
 from ..database import get_db
 from sqlalchemy.orm import Session
+from .auth_local import get_current_user
 
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -23,7 +24,11 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat_endpoint(payload: ChatRequest, db: Session = Depends(get_db)):
+def chat_endpoint(
+    payload: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     reply, structured, conversation_id = gpt_service.generate_reply(
         payload.message, payload.conversation_id, db
     )
